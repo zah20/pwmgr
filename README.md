@@ -5,14 +5,20 @@ Commandline password manager coded from scratch in python
 ![alt tag](resources/images/pw_gen.png)
 
 
-## Features:
-- Generates secure password & stores user information
+## Current Features:
+- Generates secure password & stores user information in encrypted containers
 - Encrypts & decrypts database completely in memory
 - Doesn't require managing gpg keys & doesn't doesn't leak meta data information
 - Helpful commandline interface, similar to pass (unix password manager)
 - Can migrate existing password database from pass
 - Can add, search, edit, remove information & copy password to clipboard
-- Cloud based automatic password synchronization (Google Drive, ssh ) [Coming soon!]
+
+
+## Work in progress
+- Cloud based automatic password synchronization (Google Drive, ssh ) 
+- Pop up search with autocomplete feature for passwords
+- Securely overwrite memory segments after usage
+- Export / import passwords via csv format
 
 
 ## Requirements:
