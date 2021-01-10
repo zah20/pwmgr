@@ -16,7 +16,7 @@ Commandline password manager coded from scratch in python
 
 ## Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
-- Pop up search with autocomplete feature for passwords
+- Pop up search bar with autocomplete feature for passwords
 - Securely overwrite memory segments after usage
 - Export / import passwords via csv format
 
