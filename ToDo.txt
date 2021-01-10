@@ -1,0 +1,141 @@
+Feature upgrades, optimisations & known bugs
+============================================
+
+- [x] Cmdline user interface
+
+- [x] Uses custom database system 
+
+- [x] Encrypts and saves user data 
+
+- [x] Can decrypt & load encrypted data
+
+- [x] Generates secure password
+
+- [x] Can export and import to csv file
+        [ ] Add this feature as commandline option
+            to frontend
+
+- [x] Add option to change encryption password
+        as part of cmdline interface in frontend
+
+- [x] Add option to remove password from keyring
+        as part of cmdline interface in frontend
+
+- [x] Pass migration script builtin
+        (Can migrate passwords from pass)
+        [x] Create progress bar
+        [x] Modify the script so that file attributes
+            such as last modified for individual passwords
+            are automatically parsed & added to records
+        [x] Fix pass migration script so that 'Generate password *'
+            doesn't show up as site name & only that site name
+
+- [x] Urgent fixes that need to be made
+        [x] Fix display menu so that records are displayed
+            under correct fields
+
+- [x] Sort alphabetically by site name as default
+
+- [x] Sort search results alphabetically
+
+- [ ] Supports keybindings which opens a small pop up menu & 
+        allows you to search passwords on the fly and copy 
+        to clipboard with autocomplete feature
+
+- [ ] Fix the notes interface so that it prompts
+      the user y/n to add notes, and then accept
+      an escape sequence such as Esc / Ctrl-C 
+      instead of Enter to finish editing. Enter
+      should signify newlines only.
+
+- [ ] Fix the record adding section so that they use
+      the new dynamic space allocation function for input &
+      display text as fixed width columns
+
+- [ ] Config data needs to be built into the database
+        [ ] Store cloud credentials for syncing backup
+        [ ] Keep entry of last backed up time and date
+        [ ] Provides a list of available backups
+            for user to select & restore from, will display
+            number of entries as well as an option
+            to show summary of what is being added to database.
+        [ ] Will save user preference of backup type 
+            (daily/weekly/monthly)
+
+- [ ] Supports google drive for cloud storage as backup
+        [ ] Sync function that uses daily, weekly, monthly
+            backup option depending on what is set in config.
+            Default is weekly.
+        [ ] Finish TODO for cloud sync part in database section
+
+- [ ] Add feature: Recovery questions.
+      Prompt y/n, and allow them to enter
+      both question and answers aswell as
+      multiple recovery questions for the same
+      site
+
+- [x] Connect backend with cmdline interface
+        [x] add function
+        [x] show all function
+        [x] show index function
+        [x] show index function with multiple indexes 
+            separated by comma (will do later after
+            I create interface to display info page 
+            by page (presing space, etc.))
+        [x] search function
+        [x] edit function
+        [x] copy function
+        [x] remove function with multiple indexes
+            separated by comma
+        [x] remove function with multiple indexes
+            will show a brief summary of records
+            that will be removed & ask user for 
+            confirmation
+        [x] Improve password generation menu &
+            disable mouse while inside menu
+        [x] Fix bars so that there's no missing
+            colors
+        [x] Fix title bar for show_summary command
+
+- [ ] Support for meta data by tracking which site was 
+        copied the most or used as part of show index function.
+        [ ] Use this meta data to rank sites based on 
+            their usage
+        [ ] Show stats in the form of charts / graphs
+            on which sites were used the most for a specific
+            period such as 3/6 months / year, etc.
+
+- [ ] Keep track of last modified variable for passwords
+        & remind user if they exceed the desired length 
+        of time (e.g 6 months, 1 year, etc.)
+
+
+- [ ] Display info page by page similar to less
+
+- [ ] Automatically secure wipe memory segments before exiting
+
+- [ ] Add a logger function so that every action is time stamped
+      & can be tracked for source of bugs
+
+
+Optimization:
+=============
+
+- [ ] Time the database load function & see which functions are the
+      bottleneck and can be optimized further
+
+- [ ] Remove redundant logic checking from both backend & frontend
+
+
+Known Bugs: ([x] = Fixed, [ ] = Not yet)
+========================================
+
+- [x] Check for duplicates in database
+        & prompt user if they want to add that anyway
+
+- [x] Without adding entry to database, it fails to load.
+        This is because __encrypt_database() function doesn't
+        check whether database is empty
+
+- [x] Fix the exception handling scenarios in frontend 
+      listed as TODO in database
