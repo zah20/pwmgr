@@ -581,7 +581,7 @@ def show_summary(input_list=None):
     
     custom_refresh(print_menu_bars=False)
     print(color_menu_column_header(new_header))
-    print_block(2)
+    print_block(1)
     
     for item in data_summary:
         formatted_data = color_menu_column_data(item)
@@ -616,19 +616,21 @@ def show_index(index=None):
             r.get_recovery_email(), r.get_phone_number(),
             r.get_last_modified()[-1]]
 
-    white_space = ' '*3
+    #white_space = ' '*3
 
     print_block(1)
 
-    for i in range(len(header)):
-        category_name = '  %s:' % (header[i])
-        category_name = "{0:<20}".format(category_name)
-        category_name = text_highlight(category_name)
+    #for i in range(len(header)):
+    #    category_name = '  %s:' % (header[i])
+    #    category_name = "{0:<20}".format(category_name)
+    #    category_name = text_highlight(category_name)
 
-        if (data[i] == "''"):
-            print(category_name)
-        else:
-            print('%s %s' % (category_name, data[i]))
+    #    if (data[i] == "''"):
+    #        print(category_name)
+    #    else:
+    #        print('%s %s' % (category_name, data[i]))
+
+    display_row(header, data)
 
     print_block(1)
     print(color_menu_bars())
@@ -1153,6 +1155,43 @@ def color_menu_column_data(data_list=[], ratio=[3,2,2,1]):
         
     return text
 
+
+def display_row(field_list=[], data_list=[], header_width=20, indent=5):
+    global term_length_fixed
+    
+    if (len(data_list) == 0 or len(field_list) == 0):
+        return 
+
+    if (term_length_fixed < 50):
+        print(text_color_error('Terminal size too small to display data'))
+        sys.exit(1)
+
+
+    indent_text = ' ' * indent
+
+    for i in range(len(data_list)):
+
+        h_list = list(' ' * header_width)
+        
+        # text_list is the remaining data + space after header field
+        text_list  = list(' '*(term_length_fixed - indent - header_width)) 
+        
+        field = '%s:' % field_list[i]
+        f_list_char = list(field)
+        d_list_char = list(data_list[i])
+        
+        for j in range(len(f_list_char)):
+            h_list[j] = f_list_char[j]
+        
+        for k in range(len(d_list_char)):
+            text_list[k] = d_list_char[k]
+        
+        
+        text = Fore.WHITE + Style.BRIGHT + indent_text + \
+                ''.join(h_list) + Style.NORMAL + ''.join(text_list) + Style.RESET_ALL
+        
+        print(text)
+        
 
 
 def color_symbol_info():
