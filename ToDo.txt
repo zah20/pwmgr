@@ -1,7 +1,31 @@
 Feature upgrades, optimisations & known bugs
 ============================================
 
+Completed:
+==========
+
 - [x] Cmdline user interface
+        [x] add function
+        [x] show all function
+        [x] show index function
+        [x] show index function with multiple indexes 
+            separated by comma (will do later after
+            I create interface to display info page 
+            by page (presing space, etc.))
+        [x] search function
+        [x] edit function
+        [x] copy password to clipboard function
+        [x] remove function with multiple indexes
+            separated by comma
+        [x] remove function with multiple indexes
+            will show a brief summary of records
+            that will be removed & ask user for 
+            confirmation
+        [x] Improve password generation menu &
+            disable mouse while inside menu
+        [x] Fix bars so that there's no missing
+            colors
+        [x] Fix title bar for show_summary command
 
 - [x] Uses custom database system 
 
@@ -12,8 +36,6 @@ Feature upgrades, optimisations & known bugs
 - [x] Generates secure password
 
 - [x] Can export and import to csv file
-        [ ] Add this feature as commandline option
-            to frontend
 
 - [x] Add option to change encryption password
         as part of cmdline interface in frontend
@@ -37,6 +59,13 @@ Feature upgrades, optimisations & known bugs
 - [x] Sort alphabetically by site name as default
 
 - [x] Sort search results alphabetically
+
+
+
+Work in progress
+================
+
+- [ ] Add export/import to csv format support to frontend
 
 - [ ] Supports keybindings which opens a small pop up menu & 
         allows you to search passwords on the fly and copy 
@@ -73,29 +102,6 @@ Feature upgrades, optimisations & known bugs
       both question and answers aswell as
       multiple recovery questions for the same
       site
-
-- [x] Connect backend with cmdline interface
-        [x] add function
-        [x] show all function
-        [x] show index function
-        [x] show index function with multiple indexes 
-            separated by comma (will do later after
-            I create interface to display info page 
-            by page (presing space, etc.))
-        [x] search function
-        [x] edit function
-        [x] copy function
-        [x] remove function with multiple indexes
-            separated by comma
-        [x] remove function with multiple indexes
-            will show a brief summary of records
-            that will be removed & ask user for 
-            confirmation
-        [x] Improve password generation menu &
-            disable mouse while inside menu
-        [x] Fix bars so that there's no missing
-            colors
-        [x] Fix title bar for show_summary command
 
 - [ ] Support for meta data by tracking which site was 
         copied the most or used as part of show index function.
@@ -139,3 +145,9 @@ Known Bugs: ([x] = Fixed, [ ] = Not yet)
 
 - [x] Fix the exception handling scenarios in frontend 
       listed as TODO in database
+
+- [x] Fixed bug in show index function that had incorrect text
+      alignment
+
+- [x] Make sure database for user is stored under ~/.config/pwmgr/data.bin
+      instead of current directory otherwise database would be inaccessible

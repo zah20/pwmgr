@@ -44,12 +44,13 @@ __last_updated__ =  '10/1/2021'
 __license__      =  'GPLv3'
 
 
-global database_handler, app_name, filename, system_username, master_pwd, \
+global database_handler, app_name, file_name, system_username, master_pwd, \
         password_in_keyring, term_length_fixed
 
+# All configs / database is stored under '~/.config/pwmgr/'
 database_handler = None
 app_name = 'pwmgr'
-filename = 'data.bin'
+file_name = 'data.bin'
 system_username = ''
 master_pwd = ''
 password_in_keyring=False
@@ -323,14 +324,22 @@ def parse_args():
 
 def check_database():
     
-    global filename, app_name, database_handler, system_username, master_pwd, password_in_keyring
+    global file_name, app_name, database_handler, system_username, master_pwd, password_in_keyring
 
     custom_refresh
+
+    config_path = '/home/%s/.config/pwmgr/' % (os.getlogin())
+
+    if (os.path.exists(config_path) == False):
+        os.mkdir(config_path)
+
+    file_path = '%s%s' % (config_path, file_name)
+
 
     system_username = get_username()
     database_handler = ManageRecord()
 
-    if (os.path.isfile(filename) == False):
+    if (os.path.isfile(file_path) == False):
         # (No database found)
 
         print_block(2)
@@ -369,7 +378,7 @@ def check_database():
             master_pwd = prompt_password_once()
 
         try:
-            result = database_handler.load_database(filename, master_pwd)
+            result = database_handler.load_database(file_path, master_pwd)
                 
             if (result): # Database decryption succeeded
 
@@ -579,7 +588,7 @@ def show_summary(input_list=None):
     # ratio specified by the second index
     new_header = [['Site', 3], ['Email',2], ['Username',1.5], ['Group', 0.5]]
     
-    custom_refresh(print_menu_bars=False)
+    print_block(1)
     print(color_menu_column_header(new_header))
     print_block(1)
     
@@ -1710,7 +1719,7 @@ def menu_generate_password():
     
         for password in password_list:
     
-            custom_refresh(0,0)
+            custom_refresh(1,0)
             print(color_menu_bars())
             print(color_menu_bars())
             print_block(5)
