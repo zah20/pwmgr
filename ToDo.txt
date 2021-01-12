@@ -60,16 +60,15 @@ Completed:
 
 - [x] Sort search results alphabetically
 
+- [x] Supports keybindings which opens a small pop up menu & 
+        allows you to search passwords on the fly and copy 
+        to clipboard with autocomplete feature
 
 
 Work in progress
 ================
 
 - [ ] Add export/import to csv format support to frontend
-
-- [ ] Supports keybindings which opens a small pop up menu & 
-        allows you to search passwords on the fly and copy 
-        to clipboard with autocomplete feature
 
 - [ ] Fix the notes interface so that it prompts
       the user y/n to add notes, and then accept
@@ -151,3 +150,5 @@ Known Bugs: ([x] = Fixed, [ ] = Not yet)
 
 - [x] Make sure database for user is stored under ~/.config/pwmgr/data.bin
       instead of current directory otherwise database would be inaccessible
+
+- [x] Bug that writes database to current directory has been fixed

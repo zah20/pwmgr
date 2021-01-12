@@ -1,15 +1,14 @@
 #!/usr/bin/python3
 
-import password_utils
+from getpass import getpass
+from random import seed, randint
+from colorama import Fore, Back, Style
 from database import Record, ManageRecord
 from database import IncorrectPasswordException, DatabaseFileNotFoundException,\
         NoKeyFoundException, DatabaseNotEncryptedException, DatabaseEmptyException
-from colorama import Fore, Back, Style
 import sys, os, platform, subprocess
 import keyring, pyperclip, cursor
-from getpass import getpass
 from getch import getch
-from time import sleep
 
 
 """
@@ -39,18 +38,19 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.0.0'
-__last_updated__ =  '10/1/2021'
+__version__      =  '1.1.0'
+__last_updated__ =  '12/1/2021'
 __license__      =  'GPLv3'
 
 
 global database_handler, app_name, file_name, system_username, master_pwd, \
-        password_in_keyring, term_length_fixed
+        password_in_keyring, term_length_fixed, file_path
 
 # All configs / database is stored under '~/.config/pwmgr/'
 database_handler = None
 app_name = 'pwmgr'
 file_name = 'data.bin'
+file_path = ''
 system_username = ''
 master_pwd = ''
 password_in_keyring=False
@@ -89,6 +89,10 @@ def parse_args():
                 check_database()
                 show_summary()
                 exit(0)
+            elif (l(sys.argv[1]) == 'dmenu-bar' or l(sys.argv[1]) == '--dmenu-bar' or l(sys.argv[1]) == '-x'):
+                check_database()
+                search_bar()
+                sys.exit(0)
             elif (l(sys.argv[1]) == 'help' or l(sys.argv[1]) == '--help' or l(sys.argv[1]) == '-h'):
                 print_help()
                 sys.exit(0)
@@ -324,7 +328,7 @@ def parse_args():
 
 def check_database():
     
-    global file_name, app_name, database_handler, system_username, master_pwd, password_in_keyring
+    global file_name, file_path, app_name, database_handler, system_username, master_pwd, password_in_keyring
 
     custom_refresh
 
@@ -348,7 +352,7 @@ def check_database():
             custom_refresh()
             master_pwd = prompt_password()
             database_handler.generate_new_key(master_pwd)
-            database_handler.write_encrypted_database()
+            database_handler.write_encrypted_database(file_path)
             
             try:
                 keyring.set_password(app_name, system_username, master_pwd)
@@ -463,7 +467,7 @@ def add():
     """
     Adds a record to database
     """
-    global database_handler
+    global database_handler, file_path
     
     custom_refresh(3,2)
 
@@ -524,25 +528,27 @@ def add():
                 print(text_debug(" Record has been added successfully!"))
                 print_block(2)
                 print(color_menu_bars())
+                print_block(1)
             else:
                 print_block(2)
                 print(text_debug(" Record has been discarded"))
                 print_block(2)
                 print(color_menu_bars())
+                print_block(1)
         else:
             database_handler.add(r)
-            print_block(2)
+            print_block(1)
             print(text_debug(" Record has been added successfully!"))
-            print_block(2)
+            print_block(1)
             print(color_menu_bars())
+            print_block(1)
     else:
         database_handler.add(r)
-        custom_refresh(3,2)
+        print_block(1)
         print(text_debug(" Record has been added successfully!"))
-        print_block(2)
-        print(color_menu_bars())
+        print_block(1)
 
-    database_handler.write_encrypted_database()
+    database_handler.write_encrypted_database(file_path)
 
 
 def show_summary(input_list=None):
@@ -625,19 +631,7 @@ def show_index(index=None):
             r.get_recovery_email(), r.get_phone_number(),
             r.get_last_modified()[-1]]
 
-    #white_space = ' '*3
-
     print_block(1)
-
-    #for i in range(len(header)):
-    #    category_name = '  %s:' % (header[i])
-    #    category_name = "{0:<20}".format(category_name)
-    #    category_name = text_highlight(category_name)
-
-    #    if (data[i] == "''"):
-    #        print(category_name)
-    #    else:
-    #        print('%s %s' % (category_name, data[i]))
 
     display_row(header, data)
 
@@ -665,12 +659,13 @@ def delete_index(index=None):
     Deletes record at the specified index, supports list of indexes
     """
 
-    global database_handler
+    global database_handler, file_path
 
     if (index == None):
         return
     elif (type(index) == int):
         database_handler.remove_index(index)
+        database_handler.write_encrypted_database(file_path)
         print_block(1)
         print(text_debug(" Record has been deleted."))
         print_block(1)
@@ -685,7 +680,8 @@ def delete_index(index=None):
 
         if (choice):
             database_handler.remove_index(index) # This function is aware of lists 
-            custom_refresh()
+            database_handler.write_encrypted_database(file_path)
+            print_block(1)
             print(text_debug(" Specified records have been deleted."))
             print_block(1)
             print(color_menu_bars())
@@ -1293,6 +1289,15 @@ def print_help():
                       email & username
 
 
+    pwmgr [dmenu-bar, -x] 
+        
+          Interfaces with dmenu bar & allows you to search for records.
+          Dmenu has autocompletion features built-in, so this option is
+          a bit more convenient to use. 
+
+          Copies the password to clipboard for selected record.
+
+
     pwmgr [show, -o] [record number]
 
           Show details about the specific record from the database. 
@@ -1501,194 +1506,199 @@ def run_cmd(cmd=[], verbose=False):
         if (verbose == True):
             print(stdout)
 
-        return stdout,stderr
+        return stdout, stderr, process.returncode
 
 
 
-#===========================================================================
-#                         Password Migration Options                       #
-#===========================================================================
+#==========================================================================#
+#                       Password Generation Functions                      #
+#==========================================================================#
+
+def gen_pass(length=10, enableSymbols=True, debug=False):
+    """
+    Generates a secure password
+
+    Args: 
+        length (int): The length of specified password
+        enableSymbols (bool): Allow symbols in password (default: True)
+        debug (bool): Enable printing of generated password
+
+    Returns: 
+        (str) Generated password
+    """
+
+    if length <= 0:
+        return ""
+
+    seed()
+
+    symbols = "!@#$%^&*(){}[]<>?+-"
+    num = "0123456789"
+    lcase = "abcdefghijklmnopqrstuvwxyz"
+    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
-def get_pass_directory():
-    username = get_username()
-    get_pass_directory = ''
+    password = ""
 
-    system_name = platform.system().lower()
+    if (enableSymbols):
+        for i in range(length+1):
+            choice = rand_list([0,1,2,3])
 
-    if (system_name == 'linux' or system_name == 'darwin' \
-            or system_name == 'posix'):
-        get_pass_directory = '/home/%s/.password-store/' % username
+            if (choice == 0):
+                password = "%s%s" % (password, rand_list(symbols))
+            elif (choice == 1):
+                password = "%s%s" % (password, rand_list(num))
+            elif (choice == 2):
+                password = "%s%s" % (password, rand_list(lcase))
+            elif (choice == 3):
+                password = "%s%s" % (password, rand_list(ucase))
     else:
-        raise OSNotSupportedError()
+        for i in range(length+1):
+            choice = rand_list([0,1,2])
 
-    return get_pass_directory
-    
+            if (choice == 0):
+                password = "%s%s" % (password, rand_list(num))
+            elif (choice == 1):
+                password = "%s%s" % (password, rand_list(lcase))
+            elif (choice == 2):
+                password = "%s%s" % (password, rand_list(ucase))
 
-def get_file_list(path=''):
+    if (debug):
+        print(password)
 
-    if (path == ''):
-        return
-
-    scan = os.scandir(path)
-
-    dir_list  = []
-    file_list = []
-
-    for item in scan:
-        if (item.is_dir()):
-            dir_list.append('%s/' % item.path)
-        elif (item.is_file()):
-            file_list.append(['',item.name])
-        else:
-            pass
-
-    while (len(dir_list) != 0):
-        new_list = crawl_directory(dir_list[0])
-        dir_list.pop(0)
-        file_list = file_list + new_list[1]
-        dir_list = dir_list + new_list[0]
-
-    for i in range(len(file_list)):
-        file_list[i][1] = file_list[i][1][:-4]
-    
-    return file_list
+    return password
 
 
-def crawl_directory(path=''):
+def gen_pass_secure(length=10, debug=False, grid=False,
+        enableSymbols=True):
+    """
+    Generates a grid of 10 passwords of length 10,
+        and selects a random column among them
+        
+    Args: 
+        length (int): Length of the generated password
+        debug(bool):  Prints all generated passwords
+        grid(bool):   Returns a grid of generated password
+                        of size length x length
 
-    if (path == ''):
-        return
+        enableSymbols (bool): Allow symbols in password (default: True)
 
-    scan = os.scandir(path)
+    Returns: 
+        (str): Generated password
 
-    dir_list  = []
-    file_list = []
+                or
 
-    group_name = path.split('/')[-2]
+        int []: An array of generated passwords   
+    """
 
-    for item in scan:
-        if (item.is_dir()):
-            dir_list.append(item.path)
-        elif (item.is_file()):
+    if length < 10:
+        return -1
 
-            file_list.append([group_name, item.name])
-        else:
-            pass
-
-    new_list = [dir_list,file_list]
-
-    return new_list
-
-
-def parse_pass():
-
-    cursor.hide()
-
-    dir_path = get_pass_directory()
-
-    # file_list format: [groupname, file_name]
-    file_list = get_file_list(dir_path)
-
-    # We'll return new_list from this function
-    # format: [group_name, site_name, password, last_modified]
-    new_list = []
-
-    print_block(2)
-    print('\t\t       %s' % 'Importing from Pass')
-    print_block(1)
-
-    length = len(file_list)
-    #length = 10 # Setting to 10 for testing
-
-    cmd = "stat -c '%y'"
+    password_array = []
 
     for i in range(length):
+        
+        password_array.append(gen_pass(length, enableSymbols, debug))
 
-        update_progress_bar_classic(i, length,20,10, 'cyan')
+    password = ""
 
-        if (file_list[i][0] == ''):
-            stdout,stderr = run_cmd('pass show %s' % file_list[i][1])
-            stdout2,stderr2 = run_cmd('%s %s%s.gpg' % (cmd, dir_path, file_list[i][1]))
-        else:
-            stdout,stderr = run_cmd('pass show %s/%s' % (file_list[i][0],file_list[i][1]))
-            stdout2,stderr2 = run_cmd('%s %s%s/%s.gpg' % (cmd, dir_path, file_list[i][0], file_list[i][1]))
+    if (grid):
+        return password_array
+    else:
+        index = randint(0, length)
 
-        if (stdout == ''):
-            pass
-        else:
-            #data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip()]
-            data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip(), stdout2.split('.')[0].strip()]
-            new_list.append(data_format)
+        for i in range(length):
+            password = "%s%s" % (password, password_array[i][index])
 
-    for i in range(len(new_list)):
-        if ('Generated_Password_for_' in new_list[i][1]):
-            new_list[i][1] = new_list[i][1].split('Generated_Password_for_')[1]
+        return password
 
-    cursor.show()
 
-    #for item in new_list:
-    #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))
+def rand_list(input_list=[]):
+    """
+    Returns a random element from the input list
 
-    return new_list
+    Args:
+        input_list (list): The provided list
 
-    
-def import_from_pass():
+    Returns:
+        object chosen randomly from the list
+    """
+
+    if len(input_list) == 0:
+        return ""
+
+    index = randint(0, len(input_list)-1)
+
+    return input_list[index]
+
+
+
+#===========================================================================#
+#                             Dmenu / Search Bar                            #
+#===========================================================================#
+
+
+def run_dmenu(input_list=[], bc='#2A9BFB'):
+    """
+    Takes a list of strings as parameter, runs dmenu with
+    those choices & returns the index chosen
+
+    Args:       1) Input list of type string
+                2) The background color for dmenu
+
+    Returns:    1) Index of item that was chosen from the list
+                2) Returns None if nothing was chosen / menu
+                   was cancelled.
+                3) Returns None if empty list is passed as parameter
 
     """
-    Imports all relevant information from pass 
+
+    msg = ''
+
+    if (len(input_list) == 0):
+        return None
+
+    msg = input_list[0]
+
+    if (len(input_list) > 1):
+        for i in range(1, len(input_list)):
+            msg = '%s\n%s' % (msg, input_list[i])
+
+    cmd1 = 'echo -e "%s"' % msg
+    cmd2 = "dmenu -l 7 -i -p 'pwmgr (search)' -sb '%s'" % bc
+    cmd3 = '%s|%s' % (cmd1, cmd2)
+
+    stdout, stderr, return_code = run_cmd(cmd3)
+
+    if (return_code == 0):
+        index = input_list.index(stdout.strip())
+        return index
+    else:
+        return None
+
+
+
+def search_bar():
+    """
+    Displays search bar & copies chosen password to clipboard
+
+    Args:    N/A
+
+    Returns: N/A
     """
 
     global database_handler
+
+    bg = '#2A9BFB'
     
-    custom_refresh(3,2)
+    summary_list = database_handler.get_summary()
 
-    custom_list = []
-    record_list = []
+    index = run_dmenu(summary_list)
 
-    if (prompt_yes_no("Do you want to import from pass? (Y/n): ")):
-        custom_refresh(3,2)
-        custom_list = parse_pass()
-    else:
-        print(text_color_error("Nothing to do, quitting..."))
+    if (index == None):
         sys.exit(1)
 
-    #for item in custom_list:
-    #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))
-
-    if (len(custom_list) != 0):
-        for i in range(len(custom_list)):
-            if (custom_list[i][1] == '' or custom_list[i][2] == ''):
-                pass
-            else:
-
-                if (custom_list[i][3] != ''):
-                    r = Record(custom_list[i][1], custom_list[i][2], custom_list[i][3])
-                else:
-                    r = Record(custom_list[i][1], custom_list[i][2])
-                
-                if (custom_list[i][0] != ''):
-                    r.set_group(custom_list[i][0])
-
-                    
-
-                record_list.append(r) 
-
-        #for i in record_list:
-        #    database_handler.add(i)
-
-        database_handler.add(record_list)
-
-        database_handler.write_encrypted_database()
-
-        custom_refresh(3,1)
-        print(text_debug("(%d) Passwords were successfully imported" % (len(record_list))))
-    else:
-        print(text_color_error('No passwords were found'))
-
-    print_block(1)
-    print(color_menu_bars())
-    print_block(1)
+    copy_to_clipboard_index(index)
 
 
 
@@ -1715,7 +1725,7 @@ def menu_generate_password():
     cursor.hide()
 
     while (pwd == ''):
-        password_list = password_utils.gen_pass_secure(length, False, True, enable_symbols)
+        password_list = gen_pass_secure(length, False, True, enable_symbols)
     
         for password in password_list:
     
@@ -1827,6 +1837,193 @@ def update_progress_bar_classic(index=1,index_range=10, left_indent=10,
 
 
 
+#===========================================================================
+#                         Password Migration Options                       #
+#===========================================================================
+
+
+def get_pass_directory():
+    username = get_username()
+    get_pass_directory = ''
+
+    system_name = platform.system().lower()
+
+    if (system_name == 'linux' or system_name == 'darwin' \
+            or system_name == 'posix'):
+        get_pass_directory = '/home/%s/.password-store/' % username
+    else:
+        raise OSNotSupportedError()
+
+    return get_pass_directory
+    
+
+def get_file_list(path=''):
+
+    if (path == ''):
+        return
+
+    scan = os.scandir(path)
+
+    dir_list  = []
+    file_list = []
+
+    for item in scan:
+        if (item.is_dir()):
+            dir_list.append('%s/' % item.path)
+        elif (item.is_file()):
+            file_list.append(['',item.name])
+        else:
+            pass
+
+    while (len(dir_list) != 0):
+        new_list = crawl_directory(dir_list[0])
+        dir_list.pop(0)
+        file_list = file_list + new_list[1]
+        dir_list = dir_list + new_list[0]
+
+    for i in range(len(file_list)):
+        file_list[i][1] = file_list[i][1][:-4]
+    
+    return file_list
+
+
+def crawl_directory(path=''):
+
+    if (path == ''):
+        return
+
+    scan = os.scandir(path)
+
+    dir_list  = []
+    file_list = []
+
+    group_name = path.split('/')[-2]
+
+    for item in scan:
+        if (item.is_dir()):
+            dir_list.append(item.path)
+        elif (item.is_file()):
+
+            file_list.append([group_name, item.name])
+        else:
+            pass
+
+    new_list = [dir_list,file_list]
+
+    return new_list
+
+
+def parse_pass():
+
+    cursor.hide()
+
+    dir_path = get_pass_directory()
+
+    # file_list format: [groupname, file_name]
+    file_list = get_file_list(dir_path)
+
+    # We'll return new_list from this function
+    # format: [group_name, site_name, password, last_modified]
+    new_list = []
+
+    print_block(2)
+    print('\t\t       %s' % 'Importing from Pass')
+    print_block(1)
+
+    length = len(file_list)
+    #length = 10 # Setting to 10 for testing
+
+    cmd = "stat -c '%y'"
+
+    for i in range(length):
+
+        update_progress_bar_classic(i, length,20,10, 'cyan')
+
+        if (file_list[i][0] == ''):
+            stdout,stderr,rc = run_cmd('pass show %s' % file_list[i][1])
+            stdout2,stderr2,rc2 = run_cmd('%s %s%s.gpg' % (cmd, dir_path, file_list[i][1]))
+        else:
+            stdout,stderr,rc = run_cmd('pass show %s/%s' % (file_list[i][0],file_list[i][1]))
+            stdout2,stderr2,rc2 = run_cmd('%s %s%s/%s.gpg' % (cmd, dir_path, file_list[i][0], file_list[i][1]))
+
+        if (stdout == ''):
+            pass
+        else:
+            #data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip()]
+            data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip(), stdout2.split('.')[0].strip()]
+            new_list.append(data_format)
+
+    for i in range(len(new_list)):
+        if ('Generated_Password_for_' in new_list[i][1]):
+            new_list[i][1] = new_list[i][1].split('Generated_Password_for_')[1]
+
+    cursor.show()
+
+    #for item in new_list:
+    #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))
+
+    return new_list
+
+    
+def import_from_pass():
+
+    """
+    Imports all relevant information from pass 
+    """
+
+    global database_handler, file_path
+    
+    custom_refresh(3,2)
+
+    custom_list = []
+    record_list = []
+
+    if (prompt_yes_no("Do you want to import from pass? (Y/n): ")):
+        custom_refresh(3,2)
+        custom_list = parse_pass()
+    else:
+        print(text_color_error("Nothing to do, quitting..."))
+        sys.exit(1)
+
+    #for item in custom_list:
+    #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))
+
+    if (len(custom_list) != 0):
+        for i in range(len(custom_list)):
+            if (custom_list[i][1] == '' or custom_list[i][2] == ''):
+                pass
+            else:
+
+                if (custom_list[i][3] != ''):
+                    r = Record(custom_list[i][1], custom_list[i][2], custom_list[i][3])
+                else:
+                    r = Record(custom_list[i][1], custom_list[i][2])
+                
+                if (custom_list[i][0] != ''):
+                    r.set_group(custom_list[i][0])
+
+                    
+
+                record_list.append(r) 
+
+        #for i in record_list:
+        #    database_handler.add(i)
+
+        database_handler.add(record_list)
+
+        database_handler.write_encrypted_database(file_path)
+
+        custom_refresh(3,1)
+        print(text_debug("(%d) Passwords were successfully imported" % (len(record_list))))
+    else:
+        print(text_color_error('No passwords were found'))
+
+    print_block(1)
+    print(color_menu_bars())
+    print_block(1)
+
+
+
 #===========================================================================#
 #                               Custom Exceptions                           #
 #===========================================================================#
@@ -1837,8 +2034,13 @@ class OSNotSupportedException(Exception):
         super(OSNotSupportedException, self).__init__(msg)
 
 
+
 def main():
-    parse_args()
+    try:
+        parse_args()
+    except KeyboardInterrupt:
+        print_block(2)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

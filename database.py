@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.0.0'
-__last_updated__ =  '10/1/2021'
+__version__      =  '1.1.0'
+__last_updated__ =  '12/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -115,6 +115,31 @@ class Record():
 
         if (self.__phone_number != ''):
             s = '%s, Phone-number: %s' % (s, self.get_phone_number())
+
+        return s
+
+
+    def get_summary(self):
+        """
+        Short summary information about a record.
+
+        Used by: get_record_summary() in Class ManageDatabase()
+
+        Args:    N/A
+
+        Returns: (str)
+        """
+
+        s = "%s" % (self.get_website())
+
+        if (self.__username != ''):
+            s = '%s, %s' % (s, self.get_username())
+
+        if (self.__email != ''):
+            s = '%s, %s' % (s, self.get_email())
+
+        if (self.__group != ''):
+            s = '%s, %s' % (s, self.get_group())
 
         return s
 
@@ -357,6 +382,29 @@ class ManageRecord():
         Returns the size of data in memory
         """
         return sys.getsizeof(self.format_csv())
+
+
+    def get_summary(self):
+        """
+        This is used by the frontend for the search bar.
+
+        Presents a summary of records in database for autocompletion 
+        when searching.
+
+        Args:    N/A
+
+        Returns: A list of strings matching record indexes in database
+        """
+
+        if (len(self.__record_list) == 0):
+            return []
+
+        l = []
+
+        for item in self.__record_list:
+            l.append(item.get_summary())
+
+        return l
 
 
     def add(self, item):

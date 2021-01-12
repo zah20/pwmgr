@@ -12,11 +12,11 @@ Commandline password manager coded from scratch in python
 - Helpful commandline interface, similar to pass (unix password manager)
 - Can migrate existing password database from pass
 - Can add, search, edit, remove information & copy password to clipboard
+- Pop up search bar with autocomplete feature for passwords [Added 12/01/2021]
 
 
 ## Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
-- Pop up search bar with autocomplete feature for passwords
 - Securely overwrite memory segments after usage
 - Export / import passwords via csv format
 
@@ -24,6 +24,7 @@ Commandline password manager coded from scratch in python
 ## Requirements:
 - Python 3.x
 - Python modules: colorama, keyring, pyperclip, platform, getpass, fernet
+- Requires dmenu package in Linux if you want to use the search bar
 - Linux / Unix operating system (recommended)
 
 
@@ -63,6 +64,15 @@ pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet
           username  - Search for the keyword by username
           all       - Search for the keyword in group, site,
                       email & username
+
+
+    pwmgr [dmenu-bar, -x]
+
+          Interfaces with dmenu bar & allows you to search for records.
+          Dmenu has autocompletion features built-in, so this option is
+          a bit more convenient to use.
+
+          Copies the password to clipboard for selected record.
 
 
     pwmgr [show, -o] [record number]
