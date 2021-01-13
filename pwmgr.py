@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.1.0'
-__last_updated__ =  '12/1/2021'
+__version__      =  '1.1.1'
+__last_updated__ =  '13/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -411,12 +411,13 @@ def key_reset():
         
     """
 
-    global app_name, database_handler
+    global app_name, database_handler, file_path
     custom_refresh()
 
     new_pwd = prompt_password()
     
     database_handler.change_password(new_pwd)
+    database_handler.write_encrypted_database(file_path)
 
     system_username = get_username()
     keyring.set_password(app_name, system_username, new_pwd)
@@ -439,6 +440,9 @@ def key_show():
     global database_handler
 
     key = database_handler.get_key()
+    print_block(1)
+    print(color_menu_bars())
+    print_block(1)
     print(text_debug('Current Key: %s' % key))
     print_block(1)
     print(color_menu_bars())
@@ -498,13 +502,13 @@ def add():
                 " (Press Enter if you want to skip)   "))
 
         print_block(3)
-        usr = prompt_blank(" Username: ")
-        email = prompt_blank(" Email: ")
-        group = prompt_blank(" Group: ")
-        remark = prompt_blank(" Remark/Notes: ")
-        recovery_email = prompt_blank(" Recovery email: ")
-        phone = prompt_blank(" Phone number: ")
-        two_factor = prompt_yes_no(" Two Factor enabled? (y/N): ", False)
+        email = prompt_blank_fixed_width("Email: ")
+        group = prompt_blank_fixed_width("Group: ")
+        usr = prompt_blank_fixed_width("Username: ")
+        phone = prompt_blank_fixed_width("Phone#: ")
+        remark = prompt_blank_fixed_width("Notes: ")
+        recovery_email = prompt_blank_fixed_width("Recovery email: ", 16)
+        two_factor = prompt_yes_no("Two Factor enabled? (y/N): ", False)
 
         if (usr != ''):
             r.set_username(usr)
@@ -673,27 +677,26 @@ def delete_index(index=None):
         database_handler.remove_index(index)
         database_handler.write_encrypted_database(file_path)
         print_block(1)
-        print(text_debug(" Record has been deleted."))
+        print(text_debug("Record has been deleted."))
         print_block(1)
     elif (type(index) == list):
 
         show_summary(index)
         print_block(1)
 
-        choice = prompt_yes_no(" The records above will be deleted, continue? (y/N): ", False)
+        choice = prompt_yes_no("The records above will be deleted, continue? (y/N): ", False)
 
         print_block(2)
 
         if (choice):
             database_handler.remove_index(index) # This function is aware of lists 
             database_handler.write_encrypted_database(file_path)
-            print_block(1)
-            print(text_debug(" Specified records have been deleted."))
+            print(text_debug("Specified records have been deleted."))
             print_block(1)
             print(color_menu_bars())
             print_block(1)
         else:
-            print(text_debug(" No changes have been made to database"))
+            print(text_debug("No changes have been made to database"))
             print_block(1)
 
 
@@ -726,7 +729,7 @@ def edit_index(index=None):
 
     """
 
-    global database_handler
+    global database_handler, file_path
 
     if (index == None):
         return
@@ -793,6 +796,8 @@ def edit_index(index=None):
         r.set_phone_number(data[8])
         
         database_handler.update_index(r, index)
+        database_handler.write_encrypted_database(file_path)
+        
 
     print_block(2)
     print(color_menu_bars())
@@ -864,6 +869,27 @@ def prompt(question=""):
 def prompt_blank(question=""):
 
     value = input(color_symbol_info() + ' ' +  text_highlight(question))
+    return value
+
+
+def prompt_blank_fixed_width(question="", question_width=10, left_indent=2):
+
+    symbol = '[+] '
+
+    tl1 = list(' ' * (left_indent))
+    tl2  = list(symbol)
+    tl3 = list(' ' * (question_width))
+
+    q_list = list(question)
+
+    for i in range(len(q_list)):
+        tl3[i] = q_list[i]
+
+    text = ''.join(tl1) + Fore.CYAN + Style.BRIGHT + ''.join(tl2) + Style.RESET_ALL + \
+            Style.BRIGHT + ''.join(tl3) + Style.RESET_ALL
+
+    value = input(text)
+
     return value
 
 
@@ -948,7 +974,7 @@ def prompt_yes_no(question="", default=True):
     while (True):
         choice = prompt_blank(question)
 
-        if  (choice in choice_list):
+        if (choice in choice_list):
             if (choice in choice_list[:3]):
                 return True
             else:

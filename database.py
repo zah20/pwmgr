@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.1.0'
-__last_updated__ =  '12/1/2021'
+__version__      =  '1.1.1'
+__last_updated__ =  '13/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -290,6 +290,7 @@ class ManageRecord():
         This class mantains a list of Record objects and provides
         interfaces to interact with data on a higher level
         """
+
         self.__record_list = []
         self.__encrypted_data = ''
         self.__encryption_key = ''
@@ -569,7 +570,6 @@ class ManageRecord():
         if (type(index) == int and len(self.__record_list) != 0):
             if (index < len(self.__record_list) and index >= 0):
                 self.__record_list.pop(index)
-                self.write_encrypted_database()
         elif (type(index) == list and len(self.__record_list) != 0):
 
             count = 0
@@ -583,7 +583,6 @@ class ManageRecord():
                     self.__record_list.pop(tmp_index)
                     count += 1
 
-            self.write_encrypted_database()
         else:
             pass
     
@@ -602,10 +601,9 @@ class ManageRecord():
         if (type(index) == int and len(self.__record_list) != 0 and \
                 type(record_object) == Record):
 
-            if( index < len(self.__record_list) and index >= 0):
                 self.__record_list[index] = deepcopy(record_object)
                 self.sort()
-                self.write_encrypted_database()
+                
 
     
     def search_website(self, website='', start_index=None, \
@@ -1063,7 +1061,6 @@ class ManageRecord():
 
         self.__user_password = new_password
         self.generate_new_key(new_password, True)
-        self.write_encrypted_database()
 
 
     def __encrypt_database_in_memory(self):
