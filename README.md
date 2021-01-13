@@ -1,11 +1,13 @@
 ## Password Manager
-Commandline password manager coded from scratch in python
 
+Commandline password manager coded from scratch in python
+<br/>
 
 ![alt tag](resources/images/pw_gen.png)
 
+<br/>
 
-## Current Features:
+### Current Features:
 - Generates secure password & stores user information in encrypted containers
 - Encrypts & decrypts database completely in memory
 - Doesn't require managing gpg keys & doesn't doesn't leak meta data information
@@ -15,56 +17,44 @@ Commandline password manager coded from scratch in python
 - Pop up search bar with autocomplete feature for passwords *[Added: 12/01/2021]*
 
 
-## Work in progress
+### Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
 - Securely overwrite memory segments after usage
 - Export / import passwords via csv format
 
 
-## Requirements:
+### Requirements:
 - Python 3.x
 - Python modules: colorama, keyring, pyperclip, platform, getpass, fernet
 - Requires dmenu package in Linux if you want to use the search bar
 - Linux / Unix operating system (recommended)
 
+<br/>
+### Installation:
 
-## Installation:
+Installing required Python modules: 
 
-- Installing required Python modules: 
-
-```
-
+```bash
 pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet, csv
-
 ```
 
-
-- Installing pwmgr on your Linux system: 
-
-```
-
+Installing pwmgr on your Linux system: 
+```bash
 git clone "https://github.com/zah20/pwmgr";
-
 cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
-
 ```
 
 
-- The search bar can be binded to keys, for example if you're using
-  i3 window manager on Linux you can add the following command to your startup
-  config to have the search bar run automatically: 
+The search bar can be binded to keys, for example if you're using i3 window manager on Linux you can add the following command to your startup config to have the search bar run automatically: 
 
 ```
-
 bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x 
-
 ```
 
 
-## Basic Usage
+### Basic Usage
 
 ```
-
     pwmgr [add, -a]
 
           Allows the user to add a new record to the database.
@@ -183,7 +173,9 @@ bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x
 
 ```
 
-- For bugs & related queries please contact: **zhossain@protonmail.com**
+<br/>
 
+For feedback & related queries please contact: **zhossain@protonmail.com**
+<br/>
 
 
