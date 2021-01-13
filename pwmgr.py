@@ -77,6 +77,16 @@ def parse_args():
     if (argument_length == 1):
         print_help()
         sys.exit(0)
+    elif (argument_length == 2 and (l(sys.argv[1]) == 'dmenu-bar' or \
+            l(sys.argv[1]) == '--dmenu-bar' or l(sys.argv[1]) == '-x')):
+
+        if (check_files(['/usr/bin/dmenu']) == False): 
+            print(text_color_error('Dmenu package was not found. Please install & try again!'))
+            sys.exit(1)
+        
+        check_database()
+        search_bar()
+        sys.exit(0)
     else:
         term_length_fixed = os.get_terminal_size()[0]
 
@@ -89,10 +99,6 @@ def parse_args():
                 check_database()
                 show_summary()
                 exit(0)
-            elif (l(sys.argv[1]) == 'dmenu-bar' or l(sys.argv[1]) == '--dmenu-bar' or l(sys.argv[1]) == '-x'):
-                check_database()
-                search_bar()
-                sys.exit(0)
             elif (l(sys.argv[1]) == 'help' or l(sys.argv[1]) == '--help' or l(sys.argv[1]) == '-h'):
                 print_help()
                 sys.exit(0)
@@ -1508,6 +1514,21 @@ def run_cmd(cmd=[], verbose=False):
 
         return stdout, stderr, process.returncode
 
+
+
+def check_files(files=[]):
+    # Iterates over file_list, to verify they exist
+    # Returns: Boolean indicating whether all paths are valid files
+
+    if (files != []):
+        for f in files:
+            if (os.path.isfile(f)):
+                pass
+            else:
+                #print("File %s doesn't exist." % f)
+                return False
+
+        return True
 
 
 #==========================================================================#

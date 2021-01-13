@@ -12,7 +12,7 @@ Commandline password manager coded from scratch in python
 - Helpful commandline interface, similar to pass (unix password manager)
 - Can migrate existing password database from pass
 - Can add, search, edit, remove information & copy password to clipboard
-- Pop up search bar with autocomplete feature for passwords [Added 12/01/2021]
+- Pop up search bar with autocomplete feature for passwords [Added: 12/01/2021]
 
 
 ## Work in progress
@@ -31,7 +31,23 @@ Commandline password manager coded from scratch in python
 ## Installation:
 
 ```
-pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet
+pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet, csv
+
+```
+
+```
+git clone "https://github.com/zah20/pwmgr"
+cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/
+
+```
+
+- The search bar can be binded to keys, for example if you're using
+  i3 window manager you can add the following command to your startup
+  config to have the search bar run automatically: 
+
+```
+bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x 
+
 ```
 
 
@@ -155,8 +171,5 @@ pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet
           Show this text.
 
 ```
-
-
-
 
 

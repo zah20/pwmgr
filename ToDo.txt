@@ -152,3 +152,6 @@ Known Bugs: ([x] = Fixed, [ ] = Not yet)
       instead of current directory otherwise database would be inaccessible
 
 - [x] Bug that writes database to current directory has been fixed
+
+- [x] Fixed a bug with search bar where it would try to probe for terminal
+      size & fail if run as a service. 
