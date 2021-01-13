@@ -29,6 +29,7 @@ Commandline password manager coded from scratch in python
 - Requires dmenu package in Linux if you want to use the search bar
 - Linux / Unix operating system (recommended)
 
+
 <br/>
 ### Installation:
 
@@ -37,24 +38,24 @@ Installing required Python modules:
 ```bash
 pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet, csv
 ```
-
+<br/>
 Installing pwmgr on your Linux system: 
 ```bash
 git clone "https://github.com/zah20/pwmgr";
 cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 ```
-
-
+<br/>
 The search bar can be binded to keys, for example if you're using i3 window manager on Linux you can add the following command to your startup config to have the search bar run automatically: 
 
 ```
 bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x 
 ```
 
-
+<br/>
 ### Basic Usage
 
 ```
+
     pwmgr [add, -a]
 
           Allows the user to add a new record to the database.
