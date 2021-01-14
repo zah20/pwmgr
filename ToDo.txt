@@ -64,21 +64,7 @@ Completed:
         allows you to search passwords on the fly and copy 
         to clipboard with autocomplete feature
 
-
-Work in progress
-================
-
-- [ ] Add export/import to csv format support to frontend
-
-- [ ] Fix the notes interface so that it prompts
-      the user y/n to add notes, and then accept
-      an escape sequence such as Esc / Ctrl-C 
-      instead of Enter to finish editing. Enter
-      should signify newlines only.
-
-- [ ] Fix the record adding section so that they use
-      the new dynamic space allocation function for input &
-      display text as fixed width columns
+- [x] Add export/import to csv format support to frontend
 
 - [ ] Config data needs to be built into the database
         [ ] Store cloud credentials for syncing backup
@@ -96,6 +82,21 @@ Work in progress
             Default is weekly.
         [ ] Finish TODO for cloud sync part in database section
 
+
+- [ ] Keep track of last modified variable for passwords
+        & remind user if they exceed the desired length 
+        of time (e.g 6 months, 1 year, etc.)
+
+Work in progress
+================
+
+
+- [ ] Fix the notes interface so that it prompts
+      the user y/n to add notes, and then accept
+      an escape sequence such as Esc / Ctrl-C 
+      instead of Enter to finish editing. Enter
+      should signify newlines only.
+
 - [ ] Add feature: Recovery questions.
       Prompt y/n, and allow them to enter
       both question and answers aswell as
@@ -109,11 +110,6 @@ Work in progress
         [ ] Show stats in the form of charts / graphs
             on which sites were used the most for a specific
             period such as 3/6 months / year, etc.
-
-- [ ] Keep track of last modified variable for passwords
-        & remind user if they exceed the desired length 
-        of time (e.g 6 months, 1 year, etc.)
-
 
 - [ ] Display info page by page similar to less
 

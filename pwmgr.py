@@ -6,7 +6,7 @@ from colorama import Fore, Back, Style
 from database import Record, ManageRecord
 from database import IncorrectPasswordException, DatabaseFileNotFoundException,\
         NoKeyFoundException, DatabaseNotEncryptedException, DatabaseEmptyException
-import sys, os, platform, subprocess
+import sys, os, platform, subprocess, csv
 import keyring, pyperclip, cursor
 from getch import getch
 
@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.1.1'
-__last_updated__ =  '13/1/2021'
+__version__      =  '1.2.1'
+__last_updated__ =  '14/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -59,7 +59,7 @@ term_length_fixed = 75
 
 
 #===========================================================================
-#                Database polling & arugment parsing functions             #
+#                Database polling & argument parsing functions             #
 #===========================================================================
 
 
@@ -308,6 +308,35 @@ def parse_args():
                     keyword = (sys.argv[3]).strip()
                     search(keyword)
                     exit(0)
+                else:
+                    print(text_color_error("The selected option doesn't exist"))
+                    sys.exit(1)
+            elif (l(sys.argv[1]) == 'import' or l(sys.argv[1]) == '--import'):
+                if (l(sys.argv[2]) == 'csv'):
+                    fn = sys.argv[3].strip()
+
+                    if (fn != '' and os.path.exists(fn)):
+                        check_database()
+                        import_from_csv(fn)
+                        sys.exit(0)
+                    else:
+                        print(text_color_error("The specified file %s doesn't exist" % fn))
+                        sys.exit(1)
+                else:
+                    print(text_color_error("The selected option doesn't exist"))
+                    sys.exit(1)
+            elif (l(sys.argv[1]) == 'export' or l(sys.argv[1]) == '--export'):
+                if (l(sys.argv[2]) == 'csv'):
+                    fn = sys.argv[3].strip()
+
+                    if (fn != ''):
+                        check_database()
+                        export_to_csv(fn)
+                        sys.exit(0)
+                    else:
+                        print(text_color_error("Requires a file name"))
+                        sys.exit(1)
+
                 else:
                     print(text_color_error("The selected option doesn't exist"))
                     sys.exit(1)
@@ -1384,6 +1413,21 @@ def print_help():
             but if you do encounter one, please report to my email.
 
 
+    pwmgr import csv [filename]
+
+          Imports csv formatted data from the specified file.
+          There shouldn't be any csv header & the fields must
+          be in the following order: "site","password","username"
+          Fields must be enclosed in double quotes, & there should
+          not be any spaces in between commas.
+
+
+    pwmgr export csv [filename]
+
+          Exports all entries in database to the specified file
+          in csv format.
+
+
     pwmgr [sync, -y] [enable | disable]
 
           Allow syncing of encrypted database to Google Drive.
@@ -2067,6 +2111,63 @@ def import_from_pass():
 
     print_block(1)
     print(color_menu_bars())
+    print_block(1)
+
+
+
+def import_from_csv(file_name):
+
+    """
+    Imports from csv formatted file into database
+    """
+
+    global database_handler, file_path
+    
+    fh = open(file_name)
+
+    data_list = fh.read().splitlines()
+    
+    processed_data = csv.reader(data_list, quotechar='"', delimiter=',', \
+            quoting=csv.QUOTE_ALL, skipinitialspace=True)
+    
+
+    csv_list = []
+
+
+    for item in processed_data:
+        csv_list.append(item)
+
+    # Fault checking (minimal)
+
+    r = csv_list[0]
+
+    if (len(r) < 3):
+        print_block(1)
+        print(text_color_error('Incorrect csv format detected '))
+        print(text_debug('Only the following format is accepted (site,pass,username)'))
+        print_block(1)
+        sys.exit(1)
+
+    database_handler.convert_csvlist_to_record(csv_list, True)
+    database_handler.write_encrypted_database(file_path)
+
+    print_block(1)
+    print(text_debug('%s entries have been imported to database' % len(csv_list)))
+    print_block(1)
+
+
+def export_to_csv(file_name):
+
+    """
+    Exports csv formatted database to the specified file
+    """
+
+    global database_handler
+
+    database_handler.export_csv(file_name)
+
+    print_block(1)
+    print(text_debug('Exported database to file: %s' % file_name))
     print_block(1)
 
 

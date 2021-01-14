@@ -15,13 +15,18 @@ Commandline password manager coded from scratch in python
 - Can migrate existing password database from pass
 - Can add, search, edit, remove information & copy password to clipboard
 - Pop up search bar with autocomplete feature for passwords *[Added: 12/01/2021]*
+- Import from / Export to csv file option has been enabled *[Added: 14/01/2021]*
 
+
+<br />
 
 ### Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
 - Securely overwrite memory segments after usage
 - Export / import passwords via csv format
 
+
+<br />
 
 ### Requirements:
 - Python 3.x
@@ -148,6 +153,21 @@ bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x
           * This feature is experimental & has not been thoroughly
             tested yet. Although there are no observable bugs
             but if you do encounter one, please report to my email.
+
+
+    pwmgr import csv [filename]
+
+          Imports csv formatted data from the specified file.
+          There shouldn't be any csv header & the fields must
+          be in the following order: "site","password","username"
+          Fields must be enclosed in double quotes, & there should
+          not be any spaces in between commas.
+
+
+    pwmgr export csv [filename]
+
+          Exports all entries in database to the specified file
+          in csv format.
 
 
     pwmgr [sync, -y] [enable | disable]

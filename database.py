@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.1.1'
-__last_updated__ =  '13/1/2021'
+__version__      =  '1.2.1'
+__last_updated__ =  '14/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -851,34 +851,52 @@ class ManageRecord():
         return csv_list
 
 
-    def __convert_csv_to_record(self, csv_list=[]):
+    def convert_csvlist_to_record(self, csv_list=[], compatible=False):
         
         """
         Converts all entries in csv formatted list
         to a list of Record objects
 
-        Args:    The name of the file
+        Args:    1) A list of str 
+                 2) This field can be set to True if we want to import 
+                    only user,pass,username field. This is useful when 
+                    importing data from other pw managers & is used only
+                    by frontend (bool, default: False)
         
         Returns: N/A
+
+        Remarks: When compatible is set to True & we're importing csv records 
+                 to database, we intentionally do not check for duplicates 
+                 as we assume that the user knows what they're doing.
+                 It is most likely to be used when a new user is 
+                 migrating to pwmgr & don't have anything setup yet.
+        
         """
 
         if (len(csv_list) == 0):
             return
 
-        for record in csv_list:
-            record_object = Record(record[0], record[1], record[2])
-            record_object.set_email(record[3])
-            record_object.set_username(record[4])
-            record_object.set_group(record[5])
-            record_object.set_remark(record[6])
-            record_object.set_two_factor(record[7])
-            record_object.set_recovery_email(record[8])
-            record_object.set_phone_number(record[9])
+        if (compatible):
+            for record in csv_list:
+                record_object = Record(record[0], record[1])
+                record_object.set_username(record[2])
+                self.__record_list.append(record_object)
+                self.sort()
+        else:
+            for record in csv_list:
+                record_object = Record(record[0], record[1], record[2])
+                record_object.set_email(record[3])
+                record_object.set_username(record[4])
+                record_object.set_group(record[5])
+                record_object.set_remark(record[6])
+                record_object.set_two_factor(record[7])
+                record_object.set_recovery_email(record[8])
+                record_object.set_phone_number(record[9])
 
-            self.__record_list.append(record_object)
+                self.__record_list.append(record_object)
 
             
-    def write_csv(self, filename='data.csv'):
+    def export_csv(self, filename='data.csv'):
         
         """
         Writes all entries in database into 
@@ -898,12 +916,22 @@ class ManageRecord():
         
             formatted_list = self.format_csv()
 
-            for item in formatted_list:
-                f.writelines(item)
-        except (BaseException):
+            header = 'site,pass,last_modified,email,username,group,remark,two_factor,recovery_email,phone_number\n'
+
+            f.write(header)
+
+            for i in range(len(self.__record_list)):
+
+                r = self.__record_list[i]
+
+                data = '%s\n' % (r.format_csv())
+
+                f.write(data)
+
+        except (IOError):
             return False
-        finally:
-            f.close()
+
+        f.close()
 
         return True
 
@@ -937,7 +965,7 @@ class ManageRecord():
         finally:
             f.close()
 
-        self.__convert_csv_to_record(data)
+        self.convert_csvlist_to_record(data)
 
         return True
 
@@ -1250,7 +1278,7 @@ class ManageRecord():
 
         data_list = self.read_csv_in_memory(decrypted)
 
-        self.__convert_csv_to_record(data_list)
+        self.convert_csvlist_to_record(data_list)
 
         return True
 
