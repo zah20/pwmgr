@@ -23,7 +23,6 @@ Commandline password manager coded from scratch in python
 ### Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
 - Securely overwrite memory segments after usage
-- Export / import passwords via csv format
 
 
 <br />
