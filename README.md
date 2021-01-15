@@ -52,6 +52,21 @@ git clone "https://github.com/zah20/pwmgr";
 cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 ```
 
+
+Optional - Search bar (dmenu)
+
+Arch Linux
+
+```
+pacman -S --noconfirm dmenu
+```
+
+Ubuntu
+```
+apt-get install -y dmenu
+```
+
+
 The search bar can be binded to keys, for example if you're using i3 window manager on Linux 
 you can add the following command to your startup config to have the search bar run automatically: 
 
