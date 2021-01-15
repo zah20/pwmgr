@@ -80,7 +80,7 @@ Work in progress
             number of entries as well as an option
             to show summary of what is being added to database.
         [ ] Will save user preference of backup type 
-            (daily/weekly/monthly)
+            (daily/weekly/off)
 
 - [ ] Supports google drive for cloud storage as backup
         [ ] Sync function that uses daily, weekly, monthly
@@ -117,10 +117,12 @@ Work in progress
 Optimization:
 =============
 
+- [x] Remove redundant logic checking from both backend & frontend
+
 - [ ] Time the database load function & see which functions are the
       bottleneck and can be optimized further
 
-- [x] Remove redundant logic checking from both backend & frontend
+- [ ] Improve search function by implementing binary search
 
 
 Known Bugs: ([x] = Fixed, [ ] = Not yet)

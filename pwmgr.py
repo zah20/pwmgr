@@ -365,8 +365,6 @@ def check_database():
     
     global file_name, file_path, app_name, database_handler, system_username, master_pwd, password_in_keyring
 
-    custom_refresh
-
     config_path = '/home/%s/.config/pwmgr/' % (os.getlogin())
 
     if (os.path.exists(config_path) == False):
@@ -672,9 +670,6 @@ def show_index(index=None):
 
     display_row(header, data)
 
-    print_block(1)
-    print(color_menu_bars())
-    print_block(1)
     
 
 def show_index_multiple(index_list=None):
@@ -1235,6 +1230,16 @@ def display_row(field_list=[], data_list=[], header_width=20, indent=5):
         print(text_color_error('Terminal size too small to display data'))
         sys.exit(1)
 
+    max_length = 0
+
+    for i in range(len(data_list)):
+        if (len(data_list[i]) > max_length):
+            max_length = len(data_list[i])
+
+    if (max_length > (term_length_fixed-header_width-indent)):
+        print(text_color_error('Terminal size too small to display data'))
+        sys.exit(1)
+
 
     indent_text = ' ' * indent
 
@@ -1261,6 +1266,9 @@ def display_row(field_list=[], data_list=[], header_width=20, indent=5):
         
         print(text)
         
+    print_block(1)
+    print(color_menu_bars())
+    print_block(1)
 
 
 def color_symbol_info():
