@@ -53,7 +53,7 @@ cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 ```
 
 
-Optional - Search bar (dmenu)
+#### Optional - Search bar (dmenu)
 
 Arch Linux
 
