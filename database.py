@@ -507,32 +507,6 @@ class ManageRecord():
                     break
 
             return custom_list
-        
-
-    def __sort_indexes(self, custom_list=None):
-
-        """
-        Sorts a list of indexes that point to our internal 
-        database based on their website name in ascending 
-        order
-
-        Args:    Accepts a list of indexes & sorts them
-                 by website name. This is used mainly 
-                 in search function to sort selected
-                 indexes before displaying them.
-
-        Returns: A list of indexes that point to internal
-                 database & are sorted by their site name
-                 in ascending order
-        """
-
-        if (custom_list == None): 
-            return None
-
-        if (len(self.__record_list) == 0):
-            return []
-
-        return custom_list.sort()
 
 
     def remove_website(self, item):
@@ -630,26 +604,9 @@ class ManageRecord():
         _start_index = 0
         _end_index = len(self.__record_list)
 
-        if (start_index == None and end_index == None):
-            pass
-        elif (start_index != None and end_index == None and \
-                type(start_index) == int): 
-            if (start_index >= 0 and start_index < len(end_index)):
-                _start_index == start_index
-        elif (start_index != None and end_index != None and \
-                (type(start_index) == int) and \
-                (type(end_index) == int)):
-
-            if ((end_index-start_index) <= 0):
-                return None
-
-            if (start_index >= 0 and \
-                    start_index < len(self.__record_list)):
-                _start_index = start_index
-
-            if (end_index >= 1 \
-                    and end_index <= (len(self.__record_list))):
-                _end_index = end_index
+        if (start_index != None and end_index != None):
+            _start_index = start_index 
+            _end_index = end_index
      
         search_matches = []
 
@@ -666,7 +623,7 @@ class ManageRecord():
         if (called_by_search_all): # trying to avoid repetitive sorting
             return search_matches
         else:
-            self.__sort_indexes(search_matches)
+            search_matches.sort()
             return search_matches
 
 
@@ -682,9 +639,7 @@ class ManageRecord():
                  None will be returned if the parameters are incorrect.
         """
 
-        if (type(group_name) != str):
-            return None
-        elif (group_name == ''):
+        if (group_name == ''):
             return []
 
         search_matches = []
@@ -703,7 +658,7 @@ class ManageRecord():
         if (called_by_search_all): # trying to avoid repetitive sorting
             return search_matches
         else:
-            self.__sort_indexes(search_matches)
+            search_matches.sort()
             return search_matches
 
     
@@ -721,9 +676,7 @@ class ManageRecord():
                  None is returned if the parameters are invalid.
         """
 
-        if (type(username) != str):
-            return None
-        elif (username == ''):
+        if (username == ''):
             return []
 
         search_matches = []
@@ -742,7 +695,7 @@ class ManageRecord():
         if (called_by_search_all): # trying to avoid repetitive sorting
             return search_matches
         else:
-            self.__sort_indexes(search_matches)
+            search_matches.sort()
             return search_matches
 
 
@@ -760,9 +713,7 @@ class ManageRecord():
                  None is returned if the parameters are invalid.
         """
 
-        if (type(email) != str):
-            return None
-        elif (email == ''):
+        if (email == ''):
             return []
 
         search_matches = []
@@ -781,7 +732,7 @@ class ManageRecord():
         if (called_by_search_all): # trying to avoid repetitive sorting
             return search_matches
         else:
-            self.__sort_indexes(search_matches)
+            search_matches.sort()
             return search_matches
 
     
@@ -801,8 +752,6 @@ class ManageRecord():
 
         if (keyword == ''):
             return []
-        elif (type(keyword) != str):
-            return []
 
         r1 = self.search_website(keyword, partial_match=True, called_by_search_all=True)
         r2 = self.search_username(keyword, partial_match=True, called_by_search_all= True)
@@ -811,7 +760,7 @@ class ManageRecord():
 
         search_matches = list(set(r1 + r2 + r3 + r4))
 
-        self.__sort_indexes(search_matches)
+        search_matches.sort()
         
         return search_matches
 

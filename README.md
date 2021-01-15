@@ -7,6 +7,10 @@ Commandline password manager coded from scratch in python
 
 <br />
 
+![alt tag](resources/images/search_bar.png)
+
+<br />
+
 ### Current Features:
 - Generates secure password & stores user information in encrypted containers
 - Encrypts & decrypts database completely in memory
@@ -17,13 +21,11 @@ Commandline password manager coded from scratch in python
 - Pop up search bar with autocomplete feature for passwords *[Added: 12/01/2021]*
 - Import from / Export to csv file option has been enabled *[Added: 14/01/2021]*
 
-
 <br />
 
 ### Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
 - Securely overwrite memory segments after usage
-
 
 <br />
 

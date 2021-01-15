@@ -670,8 +670,6 @@ def show_index(index=None):
             r.get_recovery_email(), r.get_phone_number(),
             r.get_last_modified()[-1]]
 
-    print_block(1)
-
     display_row(header, data)
 
     print_block(1)
@@ -791,10 +789,13 @@ def edit_index(index=None):
         else:
             print('%s %s' % (category_name, data[i]))
         
+        cursor.hide()
+
         while (True):
             char = getch()
         
             if (char == 'e' or char == 'E'):
+                cursor.show()
                 if (i == 6):
                     print_block(1)
                     data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", False)
@@ -803,10 +804,11 @@ def edit_index(index=None):
                     break
                 else:
                     print_block(1)
-                    data[i] = prompt_blank("New value: ")
+                    data[i] = prompt_blank("New value:" + ' '*5)
                     data_changed = True
                     print_block(1)
                     break
+                cursor.hide()
             elif (char == '\n'):
                 break
             elif (char == 'q' or char == 'Q'):
@@ -831,6 +833,7 @@ def edit_index(index=None):
     print_block(2)
     print(color_menu_bars())
     print_block(1)
+    cursor.show()
     
 
 def search(keyword=None):
