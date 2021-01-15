@@ -52,7 +52,7 @@ git clone "https://github.com/zah20/pwmgr";
 cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 ```
 
-
+<br />
 #### Optional - Search bar (dmenu)
 
 Arch Linux
