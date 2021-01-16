@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.2.1'
-__last_updated__ =  '14/1/2021'
+__version__      =  '1.2.2'
+__last_updated__ =  '16/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -377,12 +377,6 @@ class ManageRecord():
         Returns the number of records in database
         """
         return len(self.__record_list)
-
-        
-        """
-        Returns the size of data in memory
-        """
-        return sys.getsizeof(self.format_csv())
 
 
     def get_summary(self):
