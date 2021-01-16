@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, \
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.2.2'
-__last_updated__ =  '16/1/2021'
+__version__      =  '1.2.3'
+__last_updated__ =  '17/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -2052,7 +2052,16 @@ def parse_pass():
             pass
         else:
             #data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip()]
-            data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip(), stdout2.split('.')[0].strip()]
+            l_modified = stdout2.split('.')[0].strip()
+            date = l_modified.split(' ')[0]
+            day = date.split('-')[2]
+            month = date.split('-')[1]
+            year = date.split('-')[0]
+            formatted_date = '%s-%s-%s' % (day, month, year)
+            time = l_modified.split(' ')[1][:-3]
+            formatted_l_mod = '%s %s' % (formatted_date, time)
+
+            data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip(), formatted_l_mod]
             new_list.append(data_format)
 
     for i in range(len(new_list)):

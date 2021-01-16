@@ -146,3 +146,5 @@ Known Bugs: ([x] = Fixed, [ ] = Not yet)
 - [x] Fixed a bug with search bar where it would try to probe for terminal
       size & fail if run as a service. 
 
+- [x] Fixed bug whether last modified variable used a different date & time format
+      when being imported from pass password manager.
