@@ -31,12 +31,6 @@ Commandline password manager coded from scratch in python
 
 <br />
 
-### Work in progress
-- Cloud based automatic password synchronization (Google Drive, ssh ) 
-- Securely overwrite memory segments after usage
-
-<br />
-
 ### Requirements:
 - Python 3.x
 - Python modules: colorama, keyring, pyperclip, platform, getpass, fernet
@@ -50,14 +44,14 @@ Commandline password manager coded from scratch in python
 Installing required Python modules: 
 
 ```
-pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet, csv
+pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet, csv, cursor
 ```
+
 
 Installing pwmgr on your Linux system: 
 
 ```
-git clone "https://github.com/zah20/pwmgr";
-cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
+git clone "https://github.com/zah20/pwmgr" && cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 ```
 
 <br />
@@ -76,6 +70,8 @@ Ubuntu
 apt-get install -y dmenu
 ```
 
+
+<br />
 
 The search bar can be binded to keys, for example if you're using i3 window manager on Linux 
 you can add the following command to your startup config to have the search bar run automatically: 
