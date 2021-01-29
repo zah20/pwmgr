@@ -23,6 +23,14 @@ Commandline password manager coded from scratch in python
 
 <br />
 
+### Improvements / Bug fixes:
+- Dmenu binding to search & display record (--show-dmenu)
+- Integrity checking of database
+- No limit on database size
+- Fixed some minor bugs
+
+<br />
+
 ### Work in progress
 - Cloud based automatic password synchronization (Google Drive, ssh ) 
 - Securely overwrite memory segments after usage
@@ -56,11 +64,12 @@ cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 
 #### Optional - Search bar (dmenu)
 
-Arch Linux
+Gentoo Linux
 
 ```
-pacman -S --noconfirm dmenu
+emerge -av 'x11-misc/dmenu'
 ```
+
 
 Ubuntu
 ```
@@ -72,7 +81,15 @@ The search bar can be binded to keys, for example if you're using i3 window mana
 you can add the following command to your startup config to have the search bar run automatically: 
 
 ```
-bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x 
+# Adding record (replace terminology with any other terminal)
+bindsym $mod+a exec --no-startup-id terminology -e /usr/bin/pwmgr.py -a
+
+# Search with dmenu & show record 
+bindsym $mod+o exec --no-startup-id terminology -e /usr/bin/pwmgr.py -O 
+
+# Search with dmenu & copy password to clipboard
+bindsym $mod+c exec --no-startup-id /usr/bin/pwmgr.py -C 
+
 ```
 
 <br />
@@ -83,134 +100,140 @@ bindsym $mod+x exec --no-startup-id /usr/bin/pwmgr.py -x
 
     pwmgr [add, -a]
 
-          Allows the user to add a new record to the database.
+          Allows the user to add a new record to the database
 
 
     pwmgr [edit, -e] [record number]
 
-          Allows the user to edit the specified entry in the database.
+          Allows the user to edit the specified entry in the database
 
 
     pwmgr [search, -s] [group | site | email | username | all] keyword
 
-          Search by group, site, ..., etc.
+          Search by group, site, ..., etc. 
 
-          All records that match the specified keyword will be shown.
+          All records that match the specified keyword will be shown 
 
           * By default the search keyword without any other additional
-            parameters uses the 'search all' function.
+            parameters uses the 'search all' function
             e.g: 'pwmgr search some_keyword'
-
-          group     - Search for the keyword by group
-          site      - Search for the keyword by website
+          
+          group     - Search for the keyword by group 
+          site      - Search for the keyword by website 
           email     - Search for the keyword by email address
           username  - Search for the keyword by username
-          all       - Search for the keyword in group, site,
+          all       - Search for the keyword in group, site, 
                       email & username
-
-
-    pwmgr [dmenu-bar, -x]
-
-          Interfaces with dmenu bar & allows you to search for records.
-          Dmenu has autocompletion features built-in, so this option is
-          a bit more convenient to use.
-
-          Copies the password to clipboard for selected record.
 
 
     pwmgr [show, -o] [record number]
 
-          Show details about the specific record from the database.
+          Show details about the specific record from the database
 
-          * By defaut show command without a record number,
+          * By defaut show command without a record number, 
             displays a brief summary of the entire database
+            e.g: 'pwmgr show'
 
-          * Multiple comma separated values can also be passed
+          * Multiple comma separated values can also be passed 
             to the show command & it will display detailed
-            information about those records.
+            information about those records. 
             e.g: 'pwmgr show '1,2,3'
+
+
+    pwmgr [show-dmenu, -O] 
+        
+          Search & display record using dmenu bar 
+
+
+    pwmgr sort recent
+    
+          Show all entries from database sorted by most recently updated
+
+          * Can be useful to check which entries got & when
 
 
     pwmgr [copy, -c] [record number]
 
-          Copies the password for the specific entry to the clipboard.
+          Copies the password for the specific entry to the clipboard
+    
+
+    pwmgr [copy-dmenu, -C] 
+        
+          Searches for record using dmenu bar & copies the password 
+          to clipboard for selected record.
+          
+          * Dmenu has autocompletion features built-in, so this feature 
+            is a bit more convenient to use.
 
 
     pwmgr [rm, -d] [record number]
 
-          Remove the specified entry from the database.
+          Remove the specified entry from the database
 
-          * This command also accepts comma separated values &
+          * This command also accepts comma separated values & 
             can remove multiple entries. e.g: 'pwmgr rm 2,3,4'
+
+
+    pwmgr [generate, -g]
+
+          Allows the user to access the password generator
 
 
     pwmgr key [show | reset]
 
           show  - Displays the current key that is being used
-                  for encryption.
+                  for encryption
 
-          reset - Allows the user to change the master key.
-                  The user will be prompted for the old password.
-
+          reset - Allows the user to change the master key
+                  The user will be prompted for the old password
+    
 
     pwmgr keyring reset
 
-          Allows the user to remove password from keyring.
+          Allows the user to remove password from keyring
 
-          * This command can be useful for example if you have
+          * This command can be useful for example if you have 
             a different password database & you want to remove
             the previous password that was set on the keyring
-
+        
 
     pwmgr import pass
-
+         
           Scans for Pass (Unix Password Manager) password store
-          & imports all relevant information if they exist.
+          & imports all relevant information if they exist
 
           * This feature is experimental & has not been thoroughly
             tested yet. Although there are no observable bugs
-            but if you do encounter one, please report to my email.
+            but if you do encounter one, please report to my email
 
 
     pwmgr import csv [filename]
 
-          Imports csv formatted data from the specified file.
-          There shouldn't be any csv header & the fields must
-          be in the following order: "site","password","username"
-          Fields must be enclosed in double quotes, & there should
-          not be any spaces in between commas.
+          Imports database from csv file. Two data formats are currently supported
 
+          1) site,password,username
+
+          2) site,pass,last_modified,email,..,phone_number 
+             (10 fields, that are used internally by pwmgr)
+
+          When importing from csv, all fields other than header 
+          must be enclosed in double quotes
+          
 
     pwmgr export csv [filename]
 
-          Exports all entries in database to the specified file
-          in csv format.
+          Exports all fields in the database to csv format
 
 
-    pwmgr [sync, -y] [enable | disable]
+    pwmgr export csv-brief [filename]
 
-          Allow syncing of encrypted database to Google Drive.
-
-          * This feature is being worked on & is not currently available
-
-
-    pwmgr [sync, -y] set [daily | weekly | monthly]
-
-          Allow the database to be synced daily / weekly / monthly.
-
-          * This feature is being worked on & is not currently available
-
-
-    pwmgr [sync, -y] now
-
-          Sync the entire database immediately.
-
-          * This feature is being worked on & is not currently available
+          Exports only 'site,password,username' fields to csv format
 
 
     pwmgr [help, -h]
 
-          Show this text.
+          Show this text
+
 
 ```
 

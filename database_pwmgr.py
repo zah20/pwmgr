@@ -4,6 +4,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from datetime import datetime as DateTime
+from hashlib import sha256
 from copy import deepcopy
 from time import time
 import sys, os
@@ -32,14 +33,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 
-global __title__, __author__, __email__, __version__, __last_updated__, \
-        __license__
+global __title__, __author__, __email__, __version__, __last_updated__, __license__
 
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.2.3'
-__last_updated__ =  '17/1/2021'
+__version__      =  '1.4.0'
+__last_updated__ =  '29/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -284,6 +284,7 @@ class Record():
 
 
 class ManageRecord():
+
     def __init__(self):
 
         """
@@ -295,10 +296,10 @@ class ManageRecord():
         self.__encrypted_data = ''
         self.__encryption_key = ''
         self.__salt = ''
-        self.__salt_length = None
+        self.__salt_length = 32
+        self.__hash_length = 64 # SHA-256
         self.__user_password = ''
 
-    
     def print_data(self, item_list=None):
 
         if (item_list == None):
@@ -501,6 +502,96 @@ class ManageRecord():
                     break
 
             return custom_list
+
+
+    def __sort_by_last_modified(self, custom_list=None):
+
+        """
+        Sorts records by most recent to least
+
+        Args:    Accepts a list of records for sorting. 
+                 If no parameters are passed, sorts the 
+                 inernal list of records
+
+        Returns: If optional parameter was passed returns
+                 the sorted list
+        """
+
+        if (custom_list == None or len(custom_list) == 0):
+            return []
+
+        l_mod = [] 
+
+        for i in range(len(custom_list)):
+            l_mod.append([custom_list[i],i])
+
+        while (True):
+            changes = False
+        
+            for i in range(len(l_mod)):
+                j = i+1
+        
+                if (j < len(l_mod)):
+                    j_last = l_mod[j][0].get_last_modified()[-1].split(' ')
+                    j_date = j_last[0].split('-')
+                    j_time = j_last[1].split(':')
+        
+                    j_day = int(j_date[0])
+                    j_month = int(j_date[1])
+                    j_year = int(j_date[2])
+                    j_hr = int(j_time[0])
+                    j_min = int(j_time[1])
+
+                    #print('%s/%s/%s %s:%s' % (j_year, j_month, j_day, j_hr, j_min))
+        
+                    j_dt_obj = DateTime(j_year, j_month, j_day, j_hr, j_min)
+        
+                    i_last = l_mod[i][0].get_last_modified()[-1].split(' ')
+                    i_date = i_last[0].split('-')
+                    i_time = i_last[1].split(':')
+        
+                    i_day = int(i_date[0])
+                    i_month = int(i_date[1])
+                    i_year = int(i_date[2])
+                    i_hr = int(i_time[0])
+                    i_min = int(i_time[1])
+        
+                    #print('%s/%s/%s %s:%s' % (i_year, i_month, i_day, i_hr, i_min))
+
+                    i_dt_obj = DateTime(i_year, i_month, i_day, i_hr, i_min)
+        
+
+                    if (i_dt_obj < j_dt_obj):
+                        tmp = l_mod[i]
+                        l_mod[i] = l_mod[j]
+                        l_mod[j] = tmp
+                        changes = True
+        
+            if (changes == False):
+                break
+
+        return l_mod
+
+
+    def get_records_last_modified(self):
+
+        """
+        Returns a list of records from database, sorted in 
+        the order of most recently modified 
+
+        Args:    N/A
+
+        Returns: A list of records sorted in the order of 
+                 most recently modified along with their
+                 appropriate index in the database
+                 e.g [[r1,2], [r2,3], [r3,7],..]
+
+        Note: This function is just used to sort & display internal
+              records in read only mode, we keep our default sorting 
+              (sort by website) & our database intact.
+        """
+
+        return self.__sort_by_last_modified(self.__record_list)
 
 
     def remove_website(self, item):
@@ -879,6 +970,49 @@ class ManageRecord():
         return True
 
 
+    def export_csv_brief(self, filename='data.csv'):
+        
+        """
+        Only 'site,pass,username' fields are exported to csv format
+
+        Args:    The name of the file
+        
+        Returns: True if the operation succeeds
+                 False if the operation fails
+        """
+
+        if (type(filename) != str):
+            raise TypeError("Filename needs to be a string")
+            
+        try:
+            f = open(filename, 'w')
+        
+            formatted_list = self.format_csv()
+
+            header = 'site,pass,username\n'
+
+            f.write(header)
+
+            for i in range(len(self.__record_list)):
+
+                r = self.__record_list[i]
+
+                s = r.format_field_csv(r.get_website())
+                p = r.format_field_csv(r.get_password())
+                u = r.format_field_csv(r.get_username())
+
+                data = '%s,%s,%s\n' % (s,p,u)
+
+                f.write(data)
+
+        except (IOError):
+            return False
+
+        f.close()
+
+        return True
+
+
     def read_csv(self, filename='data.csv'):
         
         """
@@ -1005,8 +1139,6 @@ class ManageRecord():
 
         # Generating new salt, if one doesn't already exist
         if (generate_salt):
-            # Aiming for 32 bit (salt + password)
-            self.__salt_length = 32-len(password)
             self.__salt = os.urandom(self.__salt_length)
 
         kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
@@ -1032,6 +1164,26 @@ class ManageRecord():
 
         self.__user_password = new_password
         self.generate_new_key(new_password, True)
+
+    
+    def generate_hash(self, input_str):
+        
+        """
+        Returns a sha256 hash digest value of the input string
+
+        Args:       A byte encoded string
+
+        Returns:    (str)
+        """
+    
+        if (type(input_str) != bytes):
+            raise TypeError('generate_hash(): first parameter needs to be of type bytes')
+    
+        s = sha256(input_str)
+    
+        hash_value = s.hexdigest()
+    
+        return hash_value
 
 
     def __encrypt_database_in_memory(self):
@@ -1066,7 +1218,7 @@ class ManageRecord():
         self.__encrypted_data = encrypted_data
 
 
-    def write_encrypted_database(self, filename='data.bin', export=False, export_filename='backup.bin'):
+    def write_encrypted_database(self, filename='data.bin'):
 
         """
         Responsible for encryption of database
@@ -1098,47 +1250,44 @@ class ManageRecord():
 
         if (len(self.__record_list) != 0):
 
-            data_length = ''
-
             self.__encrypt_database_in_memory()
-            data_length = '%s' % (self.convert_int_to_hex(len(self.__encrypted_data),4))
-            file_type = '00'
+            encrypted_hash = self.generate_hash((self.__salt + self.__encrypted_data))
+            file_type = '01'
 
-            if (export): # Writing file that will be used for cloud sync
-                         # TODO(1): This part will be completed later after
-                         # rest of the database has a stable code base
-                         # & has been tested thoroughly
-                file_type = '01'
-            else: # Writing regular file
-
-                try:
-                    salt_length_hex = '%s' % (self.convert_int_to_hex(self.__salt_length, 2))
-                    file_handler = open(filename, 'wb')
-                    file_handler.write(bytes(file_type, 'utf-8'))
-                    file_handler.write(bytes(salt_length_hex, 'utf-8'))
-                    file_handler.write(bytes(data_length, 'utf-8'))
-                    file_handler.write(self.__salt)
-                    file_handler.write(self.__encrypted_data)
-                    file_handler.close()
-                    return True
-                except IOError as e:
-                    print("write_encrypted_database(): error#01 occured while writing database")
-                    return False
-
-        else: # When records are empty & we are just writing salt with no database
-              # We also assume that we don't allow exporting to backup format 
-              # with an empty database
+            #---------------------------------------#
+            #          Writing regular file         #
+            #---------------------------------------#
+            # 01 | hash | salt | data               #
+            #---------------------------------------#
 
             try:
-                file_type = '00'
-                salt_length_hex = '%s' % (self.convert_int_to_hex(self.__salt_length, 2))
-                data_length = '0000'
-
                 file_handler = open(filename, 'wb')
+                file_handler.write(bytes(file_type, 'utf-8'))
+                file_handler.write(bytes(encrypted_hash, 'utf-8'))
+                file_handler.write(self.__salt)
+                file_handler.write(self.__encrypted_data)
+                file_handler.close()
+                return True
+            except IOError as e:
+                print("write_encrypted_database(): error#01 occured while writing database")
+                return False
 
+        else: 
+            #---------------------------------------------#
+            # When records are empty, we are just writing #
+            # hash & salt with no database                #
+            #---------------------------------------------#
+            # 02 | hash | salt                            #
+            #---------------------------------------------#
+
+            file_type = '02' # This filetype signifies empty database
+
+            encrypted_hash = self.generate_hash(self.__salt)
+
+            try:
+                file_handler = open(filename, 'wb')
                 file_handler.write(bytes(str(file_type), 'utf-8'))
-                file_handler.write(bytes(str(salt_length_hex), 'utf-8'))
-                file_handler.write(bytes(str(data_length), 'utf-8'))
+                file_handler.write(bytes(encrypted_hash, 'utf-8'))
                 file_handler.write(self.__salt)
                 file_handler.close() 
                 return True
@@ -1147,12 +1296,12 @@ class ManageRecord():
                 return False
 
 
-    def load_database(self, filename='data.bin', password=''):
+    def load_database(self, filename='data.bin', password='', override_integrity_check=False):
         
         """
-        Attempts to load database from current working directory
+        Attempts to load database from specified path (filename)
 
-        Args: Specify the database name (Default: 'data.bin')
+        Args: Specify path to the database 
 
         Returns: Boolean value indicating success / failure
 
@@ -1161,6 +1310,11 @@ class ManageRecord():
                    2) DatabaseFileNotFoundException() if the
                       database file doesn't exist & load_database()
                       function is called.
+                   3) UnsupportedFileFormatException() if an older or 
+                      unsupported format was detected
+                   4) IntegrityCheckFailedException() if the calculated
+                      hash of the encrypted data doesn't match with
+                      the one stored
                       
         """
 
@@ -1179,42 +1333,78 @@ class ManageRecord():
 
             file_type = (fh.read(2)).decode('utf-8')
 
-            # Salt length specified in first 2 bytes of file
-            self.__salt_length = self.convert_hex_to_int((fh.read(2)).decode('utf-8'))
         except IOError as e:
-            print("load_database(): error#01 occured while reading database")
+            print("load_database(): error#00 occured while reading database")
 
-        if (file_type == '00'):
+        if (file_type == '02'):
+            #---------------------------------------#
+            # The condition means empty database,   #
+            # so we load salt, generate new key     #
+            # & return                              #
+            #---------------------------------------#
+            # 02 | hash | salt                      #
+            #---------------------------------------#
+
             try:
-                data_length = self.convert_hex_to_int((fh.read(4)).decode('utf-8'))
-
+                loaded_hash = fh.read(self.__hash_length)
                 self.__salt = fh.read(self.__salt_length)
+                fh.close()
             except IOError as e:
                 print("load_database(): error#02 occured while reading database")
+            
+            generated_hash = self.generate_hash(self.__salt)
+
+            if (loaded_hash.decode('utf-8') != generated_hash):
+                if (override_integrity_check):
+                    pass
+                else:
+                    raise IntegrityCheckFailedException()
 
             self.generate_new_key(password, False)
 
-            if (data_length == 0): 
-            # The condition means empty database but there's salt
-            # & key that can be generated. We assume that user might
-            # want to add new records using existing key so we load old
-            # key & return
+            return True
 
-                return True
-            else:
-                try:
-                    self.__encrypted_data = fh.read()
-                except IOError as e:
-                    print("load_database(): error#03 occured while reading database")
-        else: # TODO(3) Add logic for filetype '01' with cloud sync features
-            pass
+        elif (file_type == '01'):
+            #---------------------------------------#
+            # Regular file so we try to check       #
+            # integrity of encrypted data, decrypt  #
+            # data & return                         #
+            #---------------------------------------#
+            # 01 | hash | salt | data               #
+            #---------------------------------------#
+
+            try:
+                loaded_hash = fh.read(self.__hash_length)
+                self.__salt = fh.read(self.__salt_length)
+                self.__encrypted_data = fh.read()
+                fh.close()
+            except IOError as e:
+                print("load_database(): error#01 occured while reading database")
+
+            generated_hash = self.generate_hash((self.__salt + self.__encrypted_data))
+
+            if (loaded_hash.decode('utf-8') != generated_hash):
+                if (override_integrity_check):
+                    pass
+                else:
+                    raise IntegrityCheckFailedException()
+
+            self.generate_new_key(password, False)
+
+        else:
+            try:
+                fh.close()
+            except IOError as e:
+                pass
+            
+            raise UnsupportedFileFormatException()
 
 
         fernet_handler = Fernet(self.__encryption_key)
 
         try:
-           decrypted = (fernet_handler.decrypt(self.__encrypted_data)).decode('utf-8')
-        except InvalidToken as e:  # This means password was incorrect 
+            decrypted = (fernet_handler.decrypt(self.__encrypted_data)).decode('utf-8')
+        except InvalidToken as e:
             raise IncorrectPasswordException()
 
         self.__password = password
@@ -1236,23 +1426,23 @@ class DatabaseEmptyException(Exception):
     def __init__(self, msg='No record exists'):
         super(DatabaseEmptyException, self).__init__(msg)
 
-
-class DatabaseNotEncryptedException(Exception):
-    def __init__(self, msg='Need to call __encrypt_database_in_memory() first'):
-        super(DatabaseNotEncryptedException, self).__init__(msg)
-
-
 class NoKeyFoundException(Exception):
     def __init__(self, msg="Key doesn't exist"):
         super(NoKeyFoundException, self).__init__(msg)
 
-
 class DatabaseFileNotFoundException(Exception):
-    def __init__(self, msg="data.bin file doesn't exist in current directory"):
+    def __init__(self, msg="database file not found"):
         super(DatabaseFileNotFoundException, self).__init__(msg)
 
+class IntegrityCheckFailedException(Exception):
+    def __init__(self, msg="Database file potentially corrupted"):
+        super(IntegrityCheckFailedException, self).__init__(msg)
 
 class IncorrectPasswordException(Exception):
     def __init__(self, msg="Decryption of database failed as password is incorrect"):
         super(IncorrectPasswordException, self).__init__(msg)
+
+class UnsupportedFileFormatException(Exception):
+    def __init__(self, msg="Unsupported file format detected"):
+        super(UnsupportedFileFormatException, self).__init__(msg)
 

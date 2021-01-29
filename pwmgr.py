@@ -1,15 +1,13 @@
 #!/usr/bin/python3
 
-from getpass import getpass
-from random import seed, randint
+from database_pwmgr import Record, ManageRecord, \
+        IntegrityCheckFailedException, IncorrectPasswordException, \
+        UnsupportedFileFormatException
+import sys, os, platform, subprocess, csv, keyring, pyperclip, cursor
 from colorama import Fore, Back, Style
-from database import Record, ManageRecord
-from database import IncorrectPasswordException, DatabaseFileNotFoundException,\
-        NoKeyFoundException, DatabaseNotEncryptedException, DatabaseEmptyException
-import sys, os, platform, subprocess, csv
-import keyring, pyperclip, cursor
+from random import seed, randint
+from getpass import getpass
 from getch import getch
-
 
 """
 Password Manager 
@@ -32,14 +30,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 
-global __title__, __author__, __email__, __version__, __last_updated__, \
-        __license__
+global __title__, __author__, __email__, __version__, __last_updated__, __license__
 
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.2.3'
-__last_updated__ =  '17/1/2021'
+__version__      =  '1.4.0'
+__last_updated__ =  '29/1/2021'
 __license__      =  'GPLv3'
 
 
@@ -77,28 +74,44 @@ def parse_args():
     if (argument_length == 1):
         print_help()
         sys.exit(0)
-    elif (argument_length == 2 and (l(sys.argv[1]) == 'dmenu-bar' or \
-            l(sys.argv[1]) == '--dmenu-bar' or l(sys.argv[1]) == '-x')):
-
-        if (check_files(['/usr/bin/dmenu']) == False): 
-            print(text_color_error('Dmenu package was not found. Please install & try again!'))
-            sys.exit(1)
-        
-        check_database()
-        search_bar()
-        sys.exit(0)
     else:
-        term_length_fixed = os.get_terminal_size()[0]
+        try:
+            term_length_fixed = os.get_terminal_size()[0]
+        except (OSError):
+            term_length_fixed = 100
+            
 
         if (argument_length == 2):
             if (l(sys.argv[1]) == 'add' or l(sys.argv[1]) == '--add' or l(sys.argv[1]) == '-a'):
                 check_database()
                 add()
-                exit(0)
-            elif (l(sys.argv[1]) == 'show' or l(sys.argv[1]) == '--show' or l(sys.argv[1]) == '-o'):
+                sys.exit(0)
+            elif (l(sys.argv[1]) == 'show' or l(sys.argv[1]) == '--show' or sys.argv[1] == '-o'):
                 check_database()
                 show_summary()
-                exit(0)
+                sys.exit(0)
+            elif (l(sys.argv[1]) == 'copy-dmenu' or l(sys.argv[1]) == '--copy-dmenu' or sys.argv[1] == '-C'):
+
+                if (check_files(['/usr/bin/dmenu']) == False): 
+                    print(text_color_error('Dmenu package was not found. Please install & try again!'))
+                    sys.exit(1)
+                
+                check_database()
+                search_bar_copy()
+                sys.exit(0)
+            elif (l(sys.argv[1]) == 'show-dmenu' or l(sys.argv[1]) == '--show-dmenu' or sys.argv[1] == '-O'):
+
+                if (check_files(['/usr/bin/dmenu']) == False): 
+                    print(text_color_error('Dmenu package was not found. Please install & try again!'))
+                    sys.exit(1)
+                
+                check_database()
+                search_bar_show()
+            elif (l(sys.argv[1]) == 'generate' or l(sys.argv[1]) == '--generate' or sys.argv[1] == '-g'):
+
+                menu_generate_password_standalone()
+                sys.exit(0)
+
             elif (l(sys.argv[1]) == 'help' or l(sys.argv[1]) == '--help' or l(sys.argv[1]) == '-h'):
                 print_help()
                 sys.exit(0)
@@ -106,7 +119,7 @@ def parse_args():
                 print(text_color_error("The selected option doesn't exist"))
                 sys.exit(1)
         elif (argument_length == 3):
-            if (l(sys.argv[1]) == 'show' or l(sys.argv[1]) == '--show' or l(sys.argv[1]) == '-o'):
+            if (l(sys.argv[1]) == 'show' or l(sys.argv[1]) == '--show' or sys.argv[1] == '-o'):
 
                 result = convert_str_to_int(sys.argv[2])
 
@@ -147,6 +160,17 @@ def parse_args():
                 else:
                     print(text_color_error("Requires an integer or comma separated integer values"))
                     sys.exit(1)
+            elif (l(sys.argv[1]) == 'sort' or l(sys.argv[1]) == '--sort'):
+                
+                mode = (sys.argv[2]).strip()
+
+                if (l(mode) == 'recent'):
+                    check_database()
+                    show_last_modified()
+                    sys.exit(0)
+                else:
+                    print(text_color_error("The selected option doesn't exist"))
+                    sys.exit(1)
             elif (l(sys.argv[1]) == 'edit' or l(sys.argv[1]) == '--edit' or l(sys.argv[1]) == '-e'):
 
                 index = None
@@ -176,7 +200,7 @@ def parse_args():
                 keyword = (sys.argv[2]).strip()
                 search(keyword)
                 sys.exit(0)
-            elif (l(sys.argv[1]) == 'copy' or l(sys.argv[1]) == '--copy' or l(sys.argv[1]) == '-c'):
+            elif (l(sys.argv[1]) == 'copy' or l(sys.argv[1]) == '--copy' or sys.argv[1] == '-c'):
 
                 index = None
 
@@ -216,30 +240,31 @@ def parse_args():
                         sys.exit(0)
                     else:
                         print(text_color_error("Selected index is not within range"))
-                        exit(1)
+                        sys.exit(1)
                 elif (type(index) == list):
                     new_list = [i-1 for i in index]
+                    new_list = list(set(new_list))
                     
                     for i in new_list:
                         if (database_handler.validate_index(i) == False):
                             print(text_color_error("Selected index %s is not within range" % (i+1))) 
-                            exit(1)
+                            sys.exit(1)
 
                     delete_index(new_list)
                     sys.exit(0)
                 else:
                     print(text_color_error("Requires an integer value or a comma separated list"))
-                    exit(1)
+                    sys.exit(1)
             elif (l(sys.argv[1]) == 'key' or l(sys.argv[1]) == '--key'):
 
                 if (l(sys.argv[2]) == 'show'):
                     check_database()
                     key_show()
-                    exit(0)
+                    sys.exit(0)
                 elif (l(sys.argv[2]) == 'reset'):
                     check_database()
                     key_reset()
-                    exit(0)
+                    sys.exit(0)
                 else:
                     print(text_color_error("The selected option doesn't exist"))
                     sys.exit(1)
@@ -247,7 +272,7 @@ def parse_args():
 
                 if (l(sys.argv[2]) == 'reset'):
                     keyring_reset()
-                    exit(0)
+                    sys.exit(0)
                 else:
                     print(text_color_error("The selected option doesn't exist"))
                     sys.exit(1)
@@ -255,27 +280,10 @@ def parse_args():
                 if (l(sys.argv[2]) == 'pass'):
                     check_database()
                     import_from_pass()
-                    exit(0)
+                    sys.exit(0)
                 else:
                     print(text_color_error("The selected option doesn't exist"))
                     sys.exit(1)
-            elif (l(sys.argv[1]) == 'sync' or l(sys.argv[1]) == '--sync' or l(sys.argv[1]) == '-y'):
-                
-                if (l(sys.argv[2]) == 'enable'):
-                    check_database()
-                    sync_enable()
-                    exit(0)
-                elif (l(sys.argv[2]) == 'disable'):
-                    check_database()
-                    sync_disable()
-                    exit(0)
-                elif (l(sys.argv[2]) == 'now'):
-                    check_database()
-                    sync_now()
-                    exit(0)
-                else:
-                    print(text_color_error("The selected option doesn't exist"))
-                    exit(1)
             else:
                 print(text_color_error("The selected option doesn't exist"))
                 sys.exit(1)
@@ -287,27 +295,27 @@ def parse_args():
                     check_database()
                     keyword = (sys.argv[3]).strip()
                     search_extended(keyword, 'group')
-                    exit(0)
+                    sys.exit(0)
                 elif (l(sys.argv[2]) == 'site'):
                     check_database()
                     keyword = (sys.argv[3]).strip()
                     search_extended(keyword, 'site')
-                    exit(0)
+                    sys.exit(0)
                 elif (l(sys.argv[2]) == 'email'):
                     check_database()
                     keyword = (sys.argv[3]).strip()
                     search_extended(keyword, 'email')
-                    exit(0)
+                    sys.exit(0)
                 elif (l(sys.argv[2]) == 'username'):
                     check_database()
                     keyword = (sys.argv[3]).strip()
                     search_extended(keyword, 'username')
-                    exit(0)
+                    sys.exit(0)
                 elif (l(sys.argv[2]) == 'all'):
                     check_database()
                     keyword = (sys.argv[3]).strip()
                     search(keyword)
-                    exit(0)
+                    sys.exit(0)
                 else:
                     print(text_color_error("The selected option doesn't exist"))
                     sys.exit(1)
@@ -336,19 +344,15 @@ def parse_args():
                     else:
                         print(text_color_error("Requires a file name"))
                         sys.exit(1)
+                elif (l(sys.argv[2]) == 'csv-brief'):
+                    fn = sys.argv[3].strip()
 
-                else:
-                    print(text_color_error("The selected option doesn't exist"))
-                    sys.exit(1)
-            elif (l(sys.argv[1]) == 'sync' or l(sys.argv[1]) == '--sync' or l(sys.argv[1]) == '-y'):
-
-                if (l(sys.argv[2]) == 'set'):
-                    if (l(sys.argv[3]) in ['daily', 'weekly', 'monthly']):
+                    if (fn != ''):
                         check_database()
-                        sync_set(l(sys.argv[3]))
-                        exit(0)
+                        export_to_csv(fn, brief=True)
+                        sys.exit(0)
                     else:
-                        print(text_color_error("The selected option doesn't exist"))
+                        print(text_color_error("Requires a file name"))
                         sys.exit(1)
                 else:
                     print(text_color_error("The selected option doesn't exist"))
@@ -383,7 +387,7 @@ def check_database():
 
         if (prompt_yes_no("No database exists. Do you want to create a new one? (Y/n): ")):
             custom_refresh()
-            master_pwd = prompt_password()
+            master_pwd = prompt_password(enforce_min_length=True)
             database_handler.generate_new_key(master_pwd)
             database_handler.write_encrypted_database(file_path)
             
@@ -391,7 +395,7 @@ def check_database():
                 keyring.set_password(app_name, system_username, master_pwd)
             except (Exception):
                 print(text_color_error("check_database(): error#01 Unable to store password in keyring"))
-                exit(0)
+                sys.exit(0)
 
         else:
             print_block(1)
@@ -415,7 +419,24 @@ def check_database():
             master_pwd = prompt_password_once()
 
         try:
-            result = database_handler.load_database(file_path, master_pwd)
+            try:
+                result = database_handler.load_database(file_path, master_pwd)
+
+            except (UnsupportedFileFormatException):
+                print(text_color_error('Unsupported file format detected'))
+                print(text_highlight("1) Run '--export csv out.csv' on older version of pwmgr <= 1.3"))
+                print(text_highlight("2) Backup & remove ~/.config/pwmgr/data.bin"))
+                print(text_highlight("3) Run '--import out.csv' on latest version of pwmgr >= 1.4"))
+                print()
+                sys.exit(0)
+            except (IntegrityCheckFailedException):
+                print(text_color_error('Integrity check failed, data possibly corrupted'))
+
+                if (prompt_yes_no("Load database anyway? (y/N): ", False)):
+                    result = database_handler.load_database(file_path, master_pwd, override_integrity_check=True)
+                else:
+                    print()
+                    sys.exit(0)
                 
             if (result): # Database decryption succeeded
 
@@ -424,6 +445,7 @@ def check_database():
                         keyring.set_password(app_name, system_username, master_pwd)
                     except (Exception):
                         print(text_color_error("Unable to store password in keyring"))
+
         except (IncorrectPasswordException):
                 print(text_color_error("Incorrect password! Decryption failed."))
                 sys.exit(1)
@@ -441,7 +463,7 @@ def key_reset():
     global app_name, database_handler, file_path
     custom_refresh()
 
-    new_pwd = prompt_password()
+    new_pwd = prompt_password(enforce_min_length=True)
     
     database_handler.change_password(new_pwd)
     database_handler.write_encrypted_database(file_path)
@@ -467,13 +489,9 @@ def key_show():
     global database_handler
 
     key = database_handler.get_key()
-    print_block(1)
-    print(color_menu_bars())
-    print_block(1)
+    print()
     print(text_debug('Current Key: %s' % key))
-    print_block(1)
-    print(color_menu_bars())
-    print_block(1)
+    print()
 
 
 def keyring_reset():
@@ -602,10 +620,9 @@ def show_summary(input_list=None):
     if (input_list == None):
 
         if (length == 0):
+            print()
             print(text_debug("No records found"))
-            print_block(1)
-            print(color_menu_bars())
-            print_block(1)
+            print()
             return
 
         for i in range(length):
@@ -622,7 +639,7 @@ def show_summary(input_list=None):
     
     header = ['Site', 'Username', 'Email', 'Group']
 
-    white_space = ' '*3
+    white_space  = ' '*3
     white_space2 = ' '*5
     white_space3 = ' '*9
     white_space4 = ' '*4
@@ -630,6 +647,43 @@ def show_summary(input_list=None):
     # This is for partitioning space & printing out header according to the
     # ratio specified by the second index
     new_header = [['Site', 3], ['Email',2], ['Username',1.5], ['Group', 0.5]]
+    
+    print_block(1)
+    print(color_menu_column_header(new_header))
+    print_block(1)
+    
+    for item in data_summary:
+        formatted_data = color_menu_column_data(item)
+        print(formatted_data)
+
+    print_block(1)
+    print(color_menu_bars())
+    print_block(1)
+
+
+def show_last_modified():
+    """
+    Display entries from database sorted by most recently modified
+
+    """
+
+    global database_handler
+
+    data_summary = []
+
+    input_list = database_handler.get_records_last_modified()
+
+    for i in range(len(input_list)):
+        r = input_list[i][0]
+        index = input_list[i][1]
+        data = [(index+1), r.get_website(), r.get_group(), r.get_last_modified()[-1]]
+        data_summary.append(data)
+    
+    header = ['Site', 'Group', 'Last Modified']
+
+    # This is for partitioning space & printing out header according to the
+    # ratio specified by the second index
+    new_header = [['Site', 3], ['Group', 2], ['Last Modified', 2.5]]
     
     print_block(1)
     print(color_menu_column_header(new_header))
@@ -825,10 +879,10 @@ def edit_index(index=None):
         database_handler.write_encrypted_database(file_path)
         
 
+    cursor.show()
     print_block(2)
     print(color_menu_bars())
     print_block(1)
-    cursor.show()
     
 
 def search(keyword=None):
@@ -942,7 +996,7 @@ def prompt_int(question="", default=0, min_value=0, max_value=30):
             return tmp_value
         
 
-def prompt_password():
+def prompt_password(enforce_min_length=False, min_length=8):
     """
     Used during password generation, prompts for password twice
         in case user mistypes
@@ -959,7 +1013,14 @@ def prompt_password():
             print(text_color_error(" Field cannot be blank"))
             continue
         else:
-            break
+            if (enforce_min_length):
+                if (len(value1) < min_length):
+                    print(text_color_error(" Minimum password length: %d " % min_length))
+                    continue
+                else:
+                    break
+            else:
+                break
 
     while True:    
         value2 = getpass(color_symbol_info() + text_highlight(" Retype password: "))
@@ -1335,22 +1396,22 @@ def print_help():
 
     pwmgr [add, -a]
 
-          Allows the user to add a new record to the database. 
+          Allows the user to add a new record to the database
 
 
     pwmgr [edit, -e] [record number]
 
-          Allows the user to edit the specified entry in the database.
+          Allows the user to edit the specified entry in the database
 
 
     pwmgr [search, -s] [group | site | email | username | all] keyword
 
           Search by group, site, ..., etc. 
 
-          All records that match the specified keyword will be shown. 
+          All records that match the specified keyword will be shown 
 
           * By default the search keyword without any other additional
-            parameters uses the 'search all' function. 
+            parameters uses the 'search all' function
             e.g: 'pwmgr search some_keyword'
           
           group     - Search for the keyword by group 
@@ -1361,21 +1422,13 @@ def print_help():
                       email & username
 
 
-    pwmgr [dmenu-bar, -x] 
-        
-          Interfaces with dmenu bar & allows you to search for records.
-          Dmenu has autocompletion features built-in, so this option is
-          a bit more convenient to use. 
-
-          Copies the password to clipboard for selected record.
-
-
     pwmgr [show, -o] [record number]
 
-          Show details about the specific record from the database. 
+          Show details about the specific record from the database
 
           * By defaut show command without a record number, 
             displays a brief summary of the entire database
+            e.g: 'pwmgr show'
 
           * Multiple comma separated values can also be passed 
             to the show command & it will display detailed
@@ -1383,31 +1436,57 @@ def print_help():
             e.g: 'pwmgr show '1,2,3'
 
 
+    pwmgr [show-dmenu, -O] 
+        
+          Search & display record using dmenu bar 
+
+
+    pwmgr sort recent
+    
+          Show all entries from database sorted by most recently updated
+
+          * Can be useful to check which entries got & when
+
+
     pwmgr [copy, -c] [record number]
 
-          Copies the password for the specific entry to the clipboard.
+          Copies the password for the specific entry to the clipboard
     
+
+    pwmgr [copy-dmenu, -C] 
+        
+          Searches for record using dmenu bar & copies the password 
+          to clipboard for selected record.
+          
+          * Dmenu has autocompletion features built-in, so this feature 
+            is a bit more convenient to use.
+
 
     pwmgr [rm, -d] [record number]
 
-          Remove the specified entry from the database. 
+          Remove the specified entry from the database
 
           * This command also accepts comma separated values & 
             can remove multiple entries. e.g: 'pwmgr rm 2,3,4'
 
 
+    pwmgr [generate, -g]
+
+          Allows the user to access the password generator
+
+
     pwmgr key [show | reset]
 
           show  - Displays the current key that is being used
-                  for encryption.
+                  for encryption
 
-          reset - Allows the user to change the master key. 
-                  The user will be prompted for the old password. 
+          reset - Allows the user to change the master key
+                  The user will be prompted for the old password
     
 
     pwmgr keyring reset
 
-          Allows the user to remove password from keyring.
+          Allows the user to remove password from keyring
 
           * This command can be useful for example if you have 
             a different password database & you want to remove
@@ -1417,52 +1496,39 @@ def print_help():
     pwmgr import pass
          
           Scans for Pass (Unix Password Manager) password store
-          & imports all relevant information if they exist.
+          & imports all relevant information if they exist
 
           * This feature is experimental & has not been thoroughly
             tested yet. Although there are no observable bugs
-            but if you do encounter one, please report to my email.
+            but if you do encounter one, please report to my email
 
 
     pwmgr import csv [filename]
 
-          Imports csv formatted data from the specified file.
-          There shouldn't be any csv header & the fields must
-          be in the following order: "site","password","username"
-          Fields must be enclosed in double quotes, & there should
-          not be any spaces in between commas.
+          Imports database from csv file. Two data formats are currently supported
 
+          1) site,password,username
+
+          2) site,pass,last_modified,email,..,phone_number 
+             (10 fields, that are used internally by pwmgr)
+
+          When importing from csv, all fields other than header 
+          must be enclosed in double quotes
+          
 
     pwmgr export csv [filename]
 
-          Exports all entries in database to the specified file
-          in csv format.
+          Exports all fields in the database to csv format
 
 
-    pwmgr [sync, -y] [enable | disable]
+    pwmgr export csv-brief [filename]
 
-          Allow syncing of encrypted database to Google Drive.
-
-          * This feature is being worked on & is not currently available
-        
-
-    pwmgr [sync, -y] set [daily | weekly | monthly]
-
-          Allow the database to be synced daily / weekly / monthly.
-
-          * This feature is being worked on & is not currently available
-
-
-    pwmgr [sync, -y] now
-
-          Sync the entire database immediately. 
-
-          * This feature is being worked on & is not currently available
+          Exports only 'site,password,username' fields to csv format
 
 
     pwmgr [help, -h]
 
-          Show this text.
+          Show this text
 
     """)
 
@@ -1616,7 +1682,9 @@ def check_files(files=[]):
 #                       Password Generation Functions                      #
 #==========================================================================#
 
+
 def gen_pass(length=10, enableSymbols=True, debug=False):
+
     """
     Generates a secure password
 
@@ -1654,6 +1722,9 @@ def gen_pass(length=10, enableSymbols=True, debug=False):
                 password = "%s%s" % (password, rand_list(lcase))
             elif (choice == 3):
                 password = "%s%s" % (password, rand_list(ucase))
+
+        password = update_missing_type(password)
+
     else:
         for i in range(length+1):
             choice = rand_list([0,1,2])
@@ -1671,8 +1742,9 @@ def gen_pass(length=10, enableSymbols=True, debug=False):
     return password
 
 
-def gen_pass_secure(length=10, debug=False, grid=False,
+def gen_pass_secure(length=10, debug=False, grid=True,
         enableSymbols=True):
+
     """
     Generates a grid of 10 passwords of length 10,
         and selects a random column among them
@@ -1693,9 +1765,6 @@ def gen_pass_secure(length=10, debug=False, grid=False,
         int []: An array of generated passwords   
     """
 
-    if length < 10:
-        return -1
-
     password_array = []
 
     for i in range(length):
@@ -1713,6 +1782,164 @@ def gen_pass_secure(length=10, debug=False, grid=False,
             password = "%s%s" % (password, password_array[i][index])
 
         return password
+
+
+def update_missing_type(pwd=''):
+
+    """
+    Take a password string & makes sure that all types
+    (alphanumeric + symbols) are present. If not, update
+    it accordingly & return the new string.
+
+    Args:       (str)
+
+    Returns:    (str)
+    """
+
+    symbols = "!@#$%^&*(){}[]<>?+-"
+    num = "0123456789"
+    lcase = "abcdefghijklmnopqrstuvwxyz"
+    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    output = get_max_missing_type(pwd)
+    
+    pwd_list = list(pwd)
+
+    if (output[1] != []):
+
+        c = ''
+
+        for i in output[1]:
+
+            if i == 0:
+               c  = "%s" % (rand_list(symbols))
+            elif i == 1:
+               c  = "%s" % (rand_list(num))
+            elif i == 2:
+               c  = "%s" % (rand_list(lcase))
+            elif i == 3:
+               c  = "%s" % (rand_list(ucase))
+            
+            index = get_type_index(pwd, output[0])
+
+            if (index != None):
+                pwd_list[index] = c
+
+
+        updated_value = update_missing_type(''.join(pwd_list))
+
+        return updated_value
+
+    else:
+        return pwd
+
+
+def get_type_index(s, char_type):
+
+    """
+    Returns first occurence of the character set type
+
+    Parameters: 
+    s = (str)
+
+    char_type:
+    0 : if the type is symbol
+    1 : if the type is number
+    2 : if the type is lower case
+    3 : if the type is upper case
+    """
+
+    if (char_type not in [0,1,2,3]):
+        return None
+
+    symbols = "!@#$%^&*(){}[]<>?+-"
+    num = "0123456789"
+    lcase = "abcdefghijklmnopqrstuvwxyz"
+    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    s_list = list(s)
+
+    if (char_type == 0):
+        for i in range(len(s_list)):
+            if s_list[i] in symbols:
+                return i
+    elif (char_type == 1):
+        for i in range(len(s_list)):
+            if s_list[i] in num:
+                return i
+    elif (char_type == 2):
+        for i in range(len(s_list)):
+            if s_list[i] in lcase:
+                return i
+    elif (char_type == 3):
+        for i in range(len(s_list)):
+            if s_list[i] in ucase:
+                return i
+
+    return None
+
+
+def get_max_missing_type(s):
+
+    """
+    Checks a str & returns a tuple. First value
+    denotes the maximum occurence of that type in the string,
+    while the second value (which is a list) denotes if any types
+    are missing. If all types are present, returns an empty list
+    as second parameter.
+
+    Args:       (str)
+
+    Returns: Tuple with two values (max_type, [missing_type])
+             
+
+    0 : if the type is symbol
+    1 : if the type is number
+    2 : if the type is lower case
+    3 : if the type is upper case
+    """
+    
+    symbols = "!@#$%^&*(){}[]<>?+-"
+    num = "0123456789"
+    lcase = "abcdefghijklmnopqrstuvwxyz"
+    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    s_count = 0
+    n_count = 0
+    l_count = 0
+    u_count = 0
+
+    tmp_str = list(s)
+
+    for i in range(len(tmp_str)):
+        if (tmp_str[i] in symbols):
+            s_count += 1
+        elif (tmp_str[i] in num):
+            n_count += 1
+        elif (tmp_str[i] in lcase):
+            l_count += 1
+        elif (tmp_str[i] in ucase):
+            u_count += 1
+
+    l = [s_count, n_count, l_count, u_count]
+
+    max_type = l.index(max(l))
+
+    missing_type_list = []
+
+    if (s_count == 0):
+        missing_type_list.append(0)
+
+    if (n_count == 0):
+        missing_type_list.append(1)
+
+    if (l_count == 0):
+        missing_type_list.append(2)
+
+    if (u_count == 0):
+        missing_type_list.append(3)
+
+    return (max_type, missing_type_list)
 
 
 def rand_list(input_list=[]):
@@ -1779,8 +2006,7 @@ def run_dmenu(input_list=[], bc='#2A9BFB'):
         return None
 
 
-
-def search_bar():
+def search_bar_show():
     """
     Displays search bar & copies chosen password to clipboard
 
@@ -1794,7 +2020,42 @@ def search_bar():
     bg = '#2A9BFB'
     
     summary_list = database_handler.get_summary()
+    
+    index = run_dmenu(summary_list)
 
+    if (index == None):
+        sys.exit(1)
+
+    print_block(1)
+    print(color_menu_bars())
+    print_block(1)
+    show_index(index)
+    cursor.hide()
+
+    try:
+        x = input()
+        cursor.show()
+        sys.exit(0)
+    except (KeyboardInterrupt):
+        cursor.show()
+        sys.exit(0)
+
+
+def search_bar_copy():
+    """
+    Displays search bar & copies chosen password to clipboard
+
+    Args:    N/A
+
+    Returns: N/A
+    """
+
+    global database_handler
+
+    bg = '#2A9BFB'
+    
+    summary_list = database_handler.get_summary()
+    
     index = run_dmenu(summary_list)
 
     if (index == None):
@@ -1868,6 +2129,65 @@ def menu_generate_password():
     cursor.show()
 
     return pwd
+
+
+def menu_generate_password_standalone():
+    """
+    Password generator that helps the user pick a password. 
+    Doesn't actually use the generated password.
+
+    Input:   None
+
+    Returns: Password (str)
+    """
+
+    print()
+
+    pwd = ''
+
+    length = prompt_int(text_highlight(" Enter password length (default - 10): ") , 10, 6, 30)
+    
+    enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ")
+    
+    cursor.hide()
+
+    while (pwd == ''):
+        password_list = gen_pass_secure(length, False, True, enable_symbols)
+    
+        for password in password_list:
+    
+            custom_refresh(1,0)
+            print(color_menu_bars())
+            print(color_menu_bars())
+            print_block(5)
+
+            print(color_symbol_info() + \
+                    text_highlight(" Generated password: "), text_color_cyan(password))
+    
+            print_block(5)
+
+            menu_text = "  Press (G) Generate password | (Q) Quit  "
+    
+            print(color_menu_bars())
+            print(color_menu_text(menu_text))
+            print(color_menu_bars())
+
+            while (True):
+                char = getch()
+    
+                if (char == 'g' or char == 'G'):
+                    break
+                elif (char == 'q' or char == 'Q'):
+                    cursor.show()
+                    print_block()
+                    sys.exit(1)
+                else:
+                    pass
+    
+            if (pwd != ''):
+                break
+
+    cursor.show()
 
 
 def update_progress_bar_classic(index=1,index_range=10, left_indent=10,
@@ -1954,7 +2274,7 @@ def get_pass_directory():
             or system_name == 'posix'):
         get_pass_directory = '/home/%s/.password-store/' % username
     else:
-        raise OSNotSupportedError()
+        raise OSNotSupportedException()
 
     return get_pass_directory
     
@@ -2113,12 +2433,7 @@ def import_from_pass():
                 if (custom_list[i][0] != ''):
                     r.set_group(custom_list[i][0])
 
-                    
-
                 record_list.append(r) 
-
-        #for i in record_list:
-        #    database_handler.add(i)
 
         database_handler.add(record_list)
 
@@ -2161,22 +2476,40 @@ def import_from_csv(file_name):
 
     r = csv_list[0]
 
-    if (len(r) < 3):
+    if (len(r) == 3 or len(r) == 10):
+
+        if (len(r) == 3):
+            # Discarding header
+            s = ','.join(r)
+
+            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
+                    l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
+                    l(r[2]).strip() in ['username', 'user', 'usr']):
+                csv_list = csv_list[1:]
+
+            database_handler.convert_csvlist_to_record(csv_list, True)
+        elif (len(r) == 10):
+            # Discarding header
+            if (','.join(r) ==
+                    'site,pass,last_modified,email,username,group,remark,two_factor,recovery_email,phone_number'):
+                csv_list = csv_list[1:]
+
+            database_handler.convert_csvlist_to_record(csv_list, False)
+
+        database_handler.write_encrypted_database(file_path)
+
+        print_block(1)
+        print(text_debug('%s entries have been imported to database' % len(csv_list)))
+        print_block(1)
+    else:
         print_block(1)
         print(text_color_error('Incorrect csv format detected '))
-        print(text_debug('Only the following format is accepted (site,pass,username)'))
+        print(text_debug('Two formats are accepted. Read \'import csv\' section'))
         print_block(1)
         sys.exit(1)
 
-    database_handler.convert_csvlist_to_record(csv_list, True)
-    database_handler.write_encrypted_database(file_path)
 
-    print_block(1)
-    print(text_debug('%s entries have been imported to database' % len(csv_list)))
-    print_block(1)
-
-
-def export_to_csv(file_name):
+def export_to_csv(file_name, brief=False):
 
     """
     Exports csv formatted database to the specified file
@@ -2184,12 +2517,14 @@ def export_to_csv(file_name):
 
     global database_handler
 
-    database_handler.export_csv(file_name)
+    if (brief):
+        database_handler.export_csv_brief(file_name)
+    else:
+        database_handler.export_csv(file_name)
 
     print_block(1)
     print(text_debug('Exported database to file: %s' % file_name))
     print_block(1)
-
 
 
 #===========================================================================#
@@ -2209,6 +2544,7 @@ def main():
     except KeyboardInterrupt:
         print_block(2)
         sys.exit(1)
+
 
 
 if __name__ == "__main__":

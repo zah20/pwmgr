@@ -56,10 +56,6 @@ Completed:
         [x] Fix display menu so that records are displayed
             under correct fields
 
-- [x] Sort alphabetically by site name as default
-
-- [x] Sort search results alphabetically
-
 - [x] Supports keybindings which opens a small pop up menu & 
         allows you to search passwords on the fly and copy 
         to clipboard with autocomplete feature
@@ -68,45 +64,55 @@ Completed:
 
 - [x] Fix edit menu display indentation issues
 
+- [x] Export to csv function should support 2 formats
+        [x] Export option allowing all fields
+        [x] Export option allowing only 'site,pass,username' fields
+
+- [x] Sort & display function 
+        [x] Sort by site name (default)
+        [x] Sort by most recently modified to least.
+            This can be viewed by '--sort recent' flag
+
+- [x] Another Show index function with binding to dmenu.
+      This function can be executed by '--show-dmenu' or '-S'
+
+- [x] Update password generation function so that atleast 
+        1 lower case + 1 upper case + 1 symbol + 1 digit is present
+        when password with generated with symbols enabled.
+
+- [x] Update format & enable integrity checking of salt + data
+
+- [x] Update format so that there are no limits on size of database
+
+- [x] Don't allow passwords of length less than 8 chars as master password
+
+- [x] Detection of unsupported file format on older versions
+
+- [x] Option to use password generator separately so that a user can
+        manually use that to update an existing record with stronger password
 
 Work in progress
 ================
 
-- [ ] Config data needs to be built into the database
-        [ ] Store cloud credentials for syncing backup
-        [ ] Keep entry of last backed up time and date
-        [ ] Provides a list of available backups
-            for user to select & restore from, will display
-            number of entries as well as an option
-            to show summary of what is being added to database.
-        [ ] Will save user preference of backup type 
-            (daily/weekly/off)
+- [ ] Option --audit 
+        1) check database for weak passwords & notify user to
+        update them. Weak passwords: e.g: 
+        a) less than 6 chars, 
+        b) doesn't have atleast 3 char sets (letter (upper/lower), numbers)
 
-- [ ] Supports google drive for cloud storage as backup
-        [ ] Sync function that uses daily, weekly, monthly
-            backup option depending on what is set in config.
-            Default is weekly.
-        [ ] Finish TODO for cloud sync part in database section
+        2) Check when password was last updated & remind user if they exceed 
+        the desired length of time (e.g > 1 year, etc.)
 
-- [ ] Keep track of last modified variable for passwords
-        & remind user if they exceed the desired length 
-        of time (e.g 6 months, 1 year, etc.)
+- [ ] Support for themes. The default one might not render properly on other
+        terminals so user should be able should be able to set something else
+        
+- [x] Import from csv (all fields, not just 'site,pwd,username')
+        [ ] Checking for duplicate entries when importing to existing database
+        [ ] It has minimal errors checking. It needs to check whether the 
+            fields are properly formatted and enclosed in double quotes 
 
-- [ ] Add feature: Recovery questions.
-      Prompt y/n, and allow them to enter
-      both question and answers aswell as
-      multiple recovery questions for the same
-      site
-
-- [ ] Support for meta data by tracking which site was 
-        copied the most or used as part of show index function.
-        [ ] Use this meta data to rank sites based on 
-            their usage
-        [ ] Show stats in the form of charts / graphs
-            on which sites were used the most for a specific
-            period such as 3/6 months / year, etc.
-
-- [ ] Display info page by page similar to less
+- [ ] Update note section so that it accepts an escape sequence
+        instead of enter & can support multi line input for notes, etc.
 
 - [ ] Automatically secure wipe memory segments before exiting
 
@@ -148,3 +154,25 @@ Known Bugs: ([x] = Fixed, [ ] = Not yet)
 
 - [x] Fixed bug whether last modified variable used a different date & time format
       when being imported from pass password manager.
+
+- [x] Fixed bug that appears when piping output to less or other utilities such as 
+        grep as it fails to get terminal size. Now it should work fine.
+
+
+Things I chose not to update
+============================
+
+- Decided not to switch from Fernet to Pycrypto. I was interested in PyCrypto
+  GCM mode as it provides authentication of encrypted data. Later I realized 
+  that there's no way to differentiate whether the Value error raised 
+  when decryption failed was due to key error or because data was tampered with
+  (the tag didn't match). I'd probably have to write my own integrity checking 
+  function anyway so although GCM is preferred choice over cbc, I'm sticking
+  with the default cbc mode in Fernet for now.
+
+- Scrapped the idea of cloud sync. Many people have disagreed with the idea
+  of having cloud based syncing option, they simply don't trust anyone
+  with their personal data.
+
+  https://forums.gentoo.org/viewtopic-t-1128124.html
+
