@@ -26,14 +26,14 @@ Commandline password manager coded from scratch in python
 ### Improvements / Bug fixes:
 - Dmenu binding to search & display record (--show-dmenu)
 - Integrity checking of database
-- No limit on database size
+- Updated format, now there's no limit on database size
 - Fixed some minor bugs
 
 <br />
 
 ### Requirements:
 - Python 3.x
-- Python modules: colorama, keyring, pyperclip, platform, getpass, fernet
+- Python modules: colorama, keyring, pyperclip, platform, getpass, fernet, csv, cursor
 - Requires dmenu package in Linux if you want to use the search bar
 - Linux / Unix operating system (recommended)
 
@@ -145,7 +145,7 @@ bindsym $mod+c exec --no-startup-id /usr/bin/pwmgr.py -C
     
           Show all entries from database sorted by most recently updated
 
-          * Can be useful to check which entries got & when
+          * Can be useful to check which entries got updated & when
 
 
     pwmgr [copy, -c] [record number]
@@ -172,7 +172,7 @@ bindsym $mod+c exec --no-startup-id /usr/bin/pwmgr.py -C
 
     pwmgr [generate, -g]
 
-          Allows the user to access the password generator
+          Allows the user access to the password generator
 
 
     pwmgr key [show | reset]

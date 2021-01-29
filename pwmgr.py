@@ -1445,7 +1445,7 @@ def print_help():
     
           Show all entries from database sorted by most recently updated
 
-          * Can be useful to check which entries got & when
+          * Can be useful to check which entries got updated & when
 
 
     pwmgr [copy, -c] [record number]
@@ -1472,7 +1472,7 @@ def print_help():
 
     pwmgr [generate, -g]
 
-          Allows the user to access the password generator
+          Allows the user access to the password generator
 
 
     pwmgr key [show | reset]
