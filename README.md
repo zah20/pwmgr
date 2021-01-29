@@ -14,8 +14,7 @@ Commandline password manager coded from scratch in python
 ### Current Features:
 - Generates secure password & stores user information in encrypted containers
 - Encrypts & decrypts database completely in memory
-- Uses AES 256 bit encryption, therefore doesn't require managing gpg keys 
-  & doesn't doesn't leak meta data information
+- Uses AES 256 bit encryption for storing data
 - Helpful commandline interface, similar to pass (unix password manager)
 - Can migrate existing password database from pass
 - Can add, search, edit, remove information & copy password to clipboard
