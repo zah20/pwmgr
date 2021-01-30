@@ -503,8 +503,6 @@ def keyring_reset():
     global app_name
 
     system_username = get_username()
-    print_block(1)
-    print(color_menu_bars())
 
     try:
         keyring.delete_password(app_name, system_username)
@@ -513,9 +511,6 @@ def keyring_reset():
         print_block(1)
     except keyring.errors.PasswordDeleteError:
         print(text_color_error('No password found in keyring'))
-
-    print(color_menu_bars())
-    print_block(1)
 
 
 def add():
