@@ -1,5 +1,5 @@
 colorama
+cursor
+fernet
 keyring
 pyperclip
-fernet
-cursor

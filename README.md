@@ -33,7 +33,7 @@ Commandline password manager coded from scratch in python
 
 ### Requirements:
 - Python 3.x
-- Python modules: colorama, keyring, pyperclip, platform, getpass, fernet, csv, cursor
+- Python modules: colorama, cursor, fernet, keyring, pyperclip
 - Requires dmenu package in Linux if you want to use the search bar
 - Linux / Unix operating system (recommended)
 
@@ -92,7 +92,7 @@ bindsym $mod+c exec --no-startup-id /usr/bin/pwmgr.py -C
 
 <br />
 
-### Basic Usage
+### Help page
 
 ```
 
