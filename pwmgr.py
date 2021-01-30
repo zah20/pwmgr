@@ -3,7 +3,7 @@
 from database_pwmgr import Record, ManageRecord, \
         IntegrityCheckFailedException, IncorrectPasswordException, \
         UnsupportedFileFormatException
-import sys, os, platform, subprocess, csv, keyring, pyperclip, cursor
+import sys, os, subprocess, csv, keyring, pyperclip, cursor
 from colorama import Fore, Back, Style
 from random import seed, randint
 from getpass import getpass
@@ -1617,12 +1617,12 @@ def clear_screen():
 
     cmd = ''
 
-    system_name = platform.system().lower()
+    system_name = l(sys.platform)
 
     if (system_name == 'linux' or system_name == 'darwin' \
-            or system_name == 'posix'):
+            or system_name == 'linux2'):
         cmd = 'clear'
-    elif (system_name == 'windows'):
+    elif (system_name == 'win32'):
         cmd = 'cls'
     else:
         cmd = 'clear'

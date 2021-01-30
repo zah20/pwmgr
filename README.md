@@ -41,18 +41,20 @@ Commandline password manager coded from scratch in python
 
 ### Installation:
 
-Installing required Python modules: 
-
-```
-pip3 install --user colorama, keyring, pyperclip, platform, getpass, fernet, csv, cursor
-```
-
-
 Installing pwmgr on your Linux system: 
 
 ```
 git clone "https://github.com/zah20/pwmgr" && cd pwmgr && chmod +x pwmgr.py && sudo cp -rvf *.py /usr/bin/;
 ```
+
+
+Installing required Python modules: 
+
+```
+pip3 install --user -r requirements.txt
+```
+
+
 
 <br />
 
