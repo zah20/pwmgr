@@ -2,5 +2,4 @@ colorama
 cursor
 fernet
 getch
-keyring
 pyperclip

@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.4.0'
-__last_updated__ =  '29/1/2021'
+__version__      =  '1.5.0'
+__last_updated__ =  '12/2/2021'
 __license__      =  'GPLv3'
 
 
@@ -1317,10 +1317,160 @@ class ManageRecord():
                       the one stored
                       
         """
+        
+        ## Debug
+        #st1 = time()
 
         if (password == ''):
             print("load_database(): Requires a password to decrypt database")
             return
+
+        if (os.path.isfile(filename) == False): 
+            # The exception below will not occur as frontend verifies path &
+            # handles errors accordingly if database is not present.
+            # It is kept as a safety measure in case used by other programs
+            raise DatabaseFileNotFoundException("load_database(): File: %s does't exist" % filename)
+
+        try:
+            fh = open(filename, 'rb')
+
+            file_type = (fh.read(2)).decode('utf-8')
+
+        except IOError as e:
+            print("load_database(): error#00 occured while reading database")
+
+        if (file_type == '02'):
+            #---------------------------------------#
+            # The condition means empty database,   #
+            # so we load salt, generate new key     #
+            # & return                              #
+            #---------------------------------------#
+            # 02 | hash | salt                      #
+            #---------------------------------------#
+
+            try:
+                loaded_hash = fh.read(self.__hash_length)
+                self.__salt = fh.read(self.__salt_length)
+                fh.close()
+            except IOError as e:
+                print("load_database(): error#02 occured while reading database")
+            
+            generated_hash = self.generate_hash(self.__salt)
+
+
+            if (loaded_hash.decode('utf-8') != generated_hash):
+                if (override_integrity_check):
+                    pass
+                else:
+                    raise IntegrityCheckFailedException()
+
+            self.generate_new_key(password, False)
+
+            return True
+
+        elif (file_type == '01'):
+            #---------------------------------------#
+            # Regular file so we try to check       #
+            # integrity of encrypted data, decrypt  #
+            # data & return                         #
+            #---------------------------------------#
+            # 01 | hash | salt | data               #
+            #---------------------------------------#
+
+            try:
+                loaded_hash = fh.read(self.__hash_length)
+                self.__salt = fh.read(self.__salt_length)
+                self.__encrypted_data = fh.read()
+                fh.close()
+            except IOError as e:
+                print("load_database(): error#01 occured while reading database")
+
+            generated_hash = self.generate_hash((self.__salt + self.__encrypted_data))
+
+            if (loaded_hash.decode('utf-8') != generated_hash):
+                if (override_integrity_check):
+                    pass
+                else:
+                    raise IntegrityCheckFailedException()
+
+            ## Debug
+            #st2 = time()
+            #print("generate_hash(), time taken: %.3fs" % (st2-st1))
+
+            self.generate_new_key(password, False)
+
+            ## Debug
+            #st3 = time()
+            #print("generated key, time taken: %.3fs" % (st3-st2))
+
+        else:
+            try:
+                fh.close()
+            except IOError as e:
+                pass
+            
+            raise UnsupportedFileFormatException()
+
+
+        fernet_handler = Fernet(self.__encryption_key)
+
+        try:
+            decrypted = (fernet_handler.decrypt(self.__encrypted_data)).decode('utf-8')
+        except InvalidToken as e:
+            raise IncorrectPasswordException()
+
+        ## Debug
+        #st4 = time()
+        #print("decrypted data(), time taken: %.3fs" % (st4-st3))
+
+        self.__password = password
+
+        data_list = self.read_csv_in_memory(decrypted)
+
+        ## Debug
+        #st5 = time()
+        #print("read_csv_in_memory(), time taken: %.3fs" % (st5-st4))
+
+        self.convert_csvlist_to_record(data_list)
+
+        ## Debug
+        #st6 = time()
+        #print("convert_csvlist_to_record(), time taken: %.3fs" % (st6-st5))
+        #print("Total time taken: %.3fs" % (st6-st1))
+
+        return True
+
+
+    def load_database_key(self, filename='data.bin', key='', override_integrity_check=False):
+        
+        """
+        Attempts to load database from specified path (filename) using key
+
+        Args: Specify path to the database 
+
+        Returns: Boolean value indicating success / failure
+
+        Exception: 1) IncorrectPasswordException() if password
+                      for decrypting data is not correct
+                   2) DatabaseFileNotFoundException() if the
+                      database file doesn't exist & load_database()
+                      function is called.
+                   3) UnsupportedFileFormatException() if an older or 
+                      unsupported format was detected
+                   4) IntegrityCheckFailedException() if the calculated
+                      hash of the encrypted data doesn't match with
+                      the one stored
+                      
+        """
+
+        ## Debug
+        #st1 = time()
+
+        if (key == ''):
+            print("load_database(): Requires a password to decrypt database")
+            return
+        else:
+            self.__encryption_key = key
 
         if (os.path.isfile(filename) == False): 
             # The exception below will not occur as frontend verifies path &
@@ -1360,8 +1510,6 @@ class ManageRecord():
                 else:
                     raise IntegrityCheckFailedException()
 
-            self.generate_new_key(password, False)
-
             return True
 
         elif (file_type == '01'):
@@ -1389,7 +1537,9 @@ class ManageRecord():
                 else:
                     raise IntegrityCheckFailedException()
 
-            self.generate_new_key(password, False)
+            ## Debug
+            #st2 = time()
+            #print("generate_hash(), time taken: %.3fs" % (st2-st1))
 
         else:
             try:
@@ -1407,15 +1557,24 @@ class ManageRecord():
         except InvalidToken as e:
             raise IncorrectPasswordException()
 
-        self.__password = password
+        ## Debug
+        #st3 = time()
+        #print("decrypted data, time taken: %.3fs" % (st3-st2))
 
         data_list = self.read_csv_in_memory(decrypted)
 
+        ## Debug
+        #st4 = time()
+        #print("read_csv_in_memory(), time taken: %.3fs" % (st4-st3))
+
         self.convert_csvlist_to_record(data_list)
 
+        ## Debug
+        #st5 = time()
+        #print("convert_csvlist_to_record(), time taken: %.3fs" % (st5-st4))
+        #print("Total time taken: %.3fs" % (st5-st1))
+
         return True
-
-
 
 #===========================================================================
 #                   Custom Exception Handling Classes                      #

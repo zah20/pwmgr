@@ -17,7 +17,6 @@ Commandline password manager coded from scratch in python
 - Uses AES 256 bit encryption for storing data
 - Helpful commandline interface, similar to pass (unix password manager)
 - Can migrate existing password database from pass
-- Can add, search, edit, remove information & copy password to clipboard
 - Pop up search bar with autocomplete feature for passwords *[Added: 12/01/2021]*
 - Import from / Export to csv file option has been enabled *[Added: 14/01/2021]*
 
@@ -26,16 +25,16 @@ Commandline password manager coded from scratch in python
 ### Improvements / Bug fixes:
 - Dmenu binding to search & display record (--show-dmenu)
 - Integrity checking of database
-- Updated format, now there's no limit on database size
 - Fixed some minor bugs
+- Performance improvement (3-4x faster database loading times) *[Updated: 12/02/2021]*
 
 <br />
 
 ### Requirements:
 - Python 3.x
-- Python modules: colorama, cursor, fernet, getch, keyring, pyperclip
+- Python modules: colorama, cursor, fernet, getch, pyperclip
 - Requires dmenu package in Linux if you want to use the search bar
-- Linux / Unix operating system (recommended)
+- Uses systemd keyctl facility to store keys in memory
 
 <br />
 
@@ -66,12 +65,15 @@ Gentoo Linux
 emerge -av 'x11-misc/dmenu'
 ```
 
-
 Ubuntu
 ```
 apt-get install -y dmenu
 ```
 
+Archlinux
+```
+pacman -S dmenu
+```
 
 <br />
 

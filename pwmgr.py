@@ -3,11 +3,12 @@
 from database_pwmgr import Record, ManageRecord, \
         IntegrityCheckFailedException, IncorrectPasswordException, \
         UnsupportedFileFormatException
-import sys, os, subprocess, csv, keyring, pyperclip, cursor
+import sys, os, subprocess, csv, pyperclip, cursor
 from colorama import Fore, Back, Style
 from random import seed, randint
 from getpass import getpass
 from getch import getch
+from time import time
 
 """
 Password Manager 
@@ -35,12 +36,12 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.4.0'
-__last_updated__ =  '29/1/2021'
+__version__      =  '1.5.0'
+__last_updated__ =  '12/2/2021'
 __license__      =  'GPLv3'
 
 
-global database_handler, app_name, file_name, system_username, master_pwd, \
+global database_handler, app_name, file_name, master_pwd, \
         password_in_keyring, term_length_fixed, file_path
 
 # All configs / database is stored under '~/.config/pwmgr/'
@@ -48,7 +49,6 @@ database_handler = None
 app_name = 'pwmgr'
 file_name = 'data.bin'
 file_path = ''
-system_username = ''
 master_pwd = ''
 password_in_keyring=False
 term_length_fixed = 75
@@ -367,7 +367,10 @@ def parse_args():
 
 def check_database():
     
-    global file_name, file_path, app_name, database_handler, system_username, master_pwd, password_in_keyring
+    ## Debug
+    #st = time()
+
+    global file_name, file_path, app_name, database_handler, master_pwd, password_in_keyring
 
     config_path = '/home/%s/.config/pwmgr/' % (os.getlogin())
 
@@ -376,9 +379,12 @@ def check_database():
 
     file_path = '%s%s' % (config_path, file_name)
 
-
-    system_username = get_username()
     database_handler = ManageRecord()
+
+    ## Debug
+    #st2 = time()
+    #print("get_username(),ManageRecord() time taken: %.3fs" % (st2-st))
+
 
     if (os.path.isfile(file_path) == False):
         # (No database found)
@@ -391,11 +397,9 @@ def check_database():
             database_handler.generate_new_key(master_pwd)
             database_handler.write_encrypted_database(file_path)
             
-            try:
-                keyring.set_password(app_name, system_username, master_pwd)
-            except (Exception):
+            if (keyring_set(database_handler.get_key()) == False):
                 print(text_color_error("check_database(): error#01 Unable to store password in keyring"))
-                sys.exit(0)
+                sys.exit(1)
 
         else:
             print_block(1)
@@ -410,17 +414,25 @@ def check_database():
         #       for master password & attempt to decrypt it
         # 
 
-        master_pwd = keyring.get_password(app_name, system_username)
+        key = keyring_get()
+        result = False
 
-        if (master_pwd == None):
-            password_in_keyring = False
-            print(color_menu_informational("Database found but password store is empty", 0))
-            print_block(2)
-            master_pwd = prompt_password_once()
+        ## Debug
+        #st3 = time()
+        #print("keyring.get_password() time taken: %.3fs" % (st3-st2))
 
         try:
             try:
-                result = database_handler.load_database(file_path, master_pwd)
+                if (key == False):
+                    password_in_keyring = False
+                    master_pwd = prompt_password_once()
+                    result = database_handler.load_database(file_path, master_pwd)
+                else:
+                    result = database_handler.load_database_key(file_path, bytes(key, 'utf-8'))
+
+                ## Debug
+                #st4 = time()
+                #print("load_database() time taken: %.3fs" % (st4-st3))
 
             except (UnsupportedFileFormatException):
                 print(text_color_error('Unsupported file format detected'))
@@ -433,7 +445,10 @@ def check_database():
                 print(text_color_error('Integrity check failed, data possibly corrupted'))
 
                 if (prompt_yes_no("Load database anyway? (y/N): ", False)):
-                    result = database_handler.load_database(file_path, master_pwd, override_integrity_check=True)
+                    if (key):
+                        result = database_handler.load_database_key(file_path, bytes(key,'utf-8'), override_integrity_check=True)
+                    else:
+                        result = database_handler.load_database(file_path, master_pwd, override_integrity_check=True)
                 else:
                     print()
                     sys.exit(0)
@@ -441,14 +456,71 @@ def check_database():
             if (result): # Database decryption succeeded
 
                 if (password_in_keyring == False):
-                    try:
-                        keyring.set_password(app_name, system_username, master_pwd)
-                    except (Exception):
+                    if (keyring_set(database_handler.get_key()) == False):
                         print(text_color_error("Unable to store password in keyring"))
 
         except (IncorrectPasswordException):
                 print(text_color_error("Incorrect password! Decryption failed."))
                 sys.exit(1)
+
+        ## Debug
+        #et = time()
+        #diff = float(et - st)
+        #print("check_database() time taken: %.3fs" % diff)
+
+
+def keyring_get():
+    global app_name
+    cmd1 = 'keyctl request user %s' % (app_name)
+    stdout,stderr,rc = run_cmd(cmd1)
+
+    #print("stdout: %s" % stdout)
+    #print("stderr: %s" % stderr)
+
+    if (stderr):
+        return False
+
+    key_id = stdout
+
+    cmd2 = 'keyctl print %s' % key_id
+    stdout,stderr,rc = run_cmd(cmd2)
+
+    if (stderr):
+        return False
+
+    return stdout
+
+
+def keyring_set(value):
+    global app_name
+    cmd = 'keyctl add user %s %s @u' % (app_name, value)
+    stdout,stderr,rc = run_cmd(cmd)
+
+    if (stderr):
+        return False
+
+    return True
+
+
+def keyring_reset():
+    """
+    Remove the current key from the keyring
+
+    """
+
+    global app_name
+
+    cmd = 'keyctl purge -s user %s' % app_name
+    stdout,stderr,rc = run_cmd(cmd)
+    
+    value = stdout.strip().split(' ')[1]
+    
+    if (int(value) == 0):
+        print(text_color_error('No password found in keyring'))
+    else:
+        print_block(1)
+        print(text_debug('Password has been deleted from keyring'))
+        print_block(1)
 
 
 def key_reset():
@@ -468,8 +540,7 @@ def key_reset():
     database_handler.change_password(new_pwd)
     database_handler.write_encrypted_database(file_path)
 
-    system_username = get_username()
-    keyring.set_password(app_name, system_username, new_pwd)
+    keyring_set(database_handler.get_key())
 
     print(text_debug('Password has been reset successfully!'))
     print_block(1)
@@ -493,24 +564,6 @@ def key_show():
     print(text_debug('Current Key: %s' % key))
     print()
 
-
-def keyring_reset():
-    """
-    Remove the current password from the keyring for the current user
-
-    """
-
-    global app_name
-
-    system_username = get_username()
-
-    try:
-        keyring.delete_password(app_name, system_username)
-        print_block(1)
-        print(text_debug('Password has been deleted from keyring'))
-        print_block(1)
-    except keyring.errors.PasswordDeleteError:
-        print(text_color_error('No password found in keyring'))
 
 
 def add():
@@ -2003,7 +2056,7 @@ def run_dmenu(input_list=[], bc='#2A9BFB'):
 
 def search_bar_show():
     """
-    Displays search bar & copies chosen password to clipboard
+    Search using search bar & display selected record
 
     Args:    N/A
 
@@ -2129,7 +2182,6 @@ def menu_generate_password():
 def menu_generate_password_standalone():
     """
     Password generator that helps the user pick a password. 
-    Doesn't actually use the generated password.
 
     Input:   None
 
