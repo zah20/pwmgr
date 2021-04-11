@@ -1,14 +1,14 @@
 #!/usr/bin/python3
 
+import sys, os, subprocess, csv, wx
 from database_pwmgr import Record, ManageRecord, \
         IntegrityCheckFailedException, IncorrectPasswordException, \
         UnsupportedFileFormatException
-import sys, os, subprocess, csv, pyperclip, cursor
 from colorama import Fore, Back, Style
 from random import seed, randint
+from time import time, sleep
 from getpass import getpass
 from getch import getch
-from time import time
 
 """
 Password Manager 
@@ -36,8 +36,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.5.0'
-__last_updated__ =  '12/2/2021'
+__version__      =  '1.6.0'
+__last_updated__ =  '11/04/2021'
 __license__      =  'GPLv3'
 
 
@@ -92,8 +92,8 @@ def parse_args():
                 sys.exit(0)
             elif (l(sys.argv[1]) == 'copy-dmenu' or l(sys.argv[1]) == '--copy-dmenu' or sys.argv[1] == '-C'):
 
-                if (check_files(['/usr/bin/dmenu']) == False): 
-                    print(text_color_error('Dmenu package was not found. Please install & try again!'))
+                if (check_files(['/usr/bin/dmenu', '/usr/bin/xclip']) == False): 
+                    print(text_color_error('Dmenu package & xclip needs to be installed.'))
                     sys.exit(1)
                 
                 check_database()
@@ -212,10 +212,14 @@ def parse_args():
                     print(text_color_error("Requires an integer value"))
                     sys.exit(1)
 
+                if (check_files(['/usr/bin/xclip']) == False): 
+                    print(text_color_error('xclip utility was not found. Please install & try again!'))
+                    sys.exit(1)
+
                 check_database()
 
                 if (database_handler.validate_index((index-1))):
-                    copy_to_clipboard_index((index-1))
+                    copy_password((index-1))
                     sys.exit(0)
                 else:
                     print(text_color_error("Selected index is not within range"))
@@ -250,6 +254,7 @@ def parse_args():
                             print(text_color_error("Selected index %s is not within range" % (i+1))) 
                             sys.exit(1)
 
+                    # delete_index function can work on both single index / list of indexes
                     delete_index(new_list)
                     sys.exit(0)
                 else:
@@ -425,7 +430,12 @@ def check_database():
             try:
                 if (key == False):
                     password_in_keyring = False
-                    master_pwd = prompt_password_once()
+                    #master_pwd = prompt_password_once() # Cmdline password prompt
+                    master_pwd = prompt_password_gui() # GUI password prompt
+
+                    if (master_pwd == False):
+                        sys.exit(0)
+
                     result = database_handler.load_database(file_path, master_pwd)
                 else:
                     result = database_handler.load_database_key(file_path, bytes(key, 'utf-8'))
@@ -638,6 +648,7 @@ def add():
                 print_block(2)
                 print(color_menu_bars())
                 print_block(1)
+                return
         else:
             database_handler.add(r)
             print_block(1)
@@ -824,7 +835,7 @@ def delete_index(index=None):
             print_block(1)
 
 
-def copy_to_clipboard_index(index=None):
+def copy_password(index=None):
 
     """
     Copy the specified index from database to clipboard
@@ -840,10 +851,20 @@ def copy_to_clipboard_index(index=None):
 
     r = database_handler.get_index(index)
     pwd = r.get_password()
+    cmd1 = "echo -n '%s' | xclip -selection clipboard" % pwd
+    os.system(cmd1)
+    print("[+] Password copied to clipboard")
+    clear_clipboard()
 
-    pyperclip.copy(pwd)
 
+def clear_clipboard(interval=30):
     
+    print("[*] Clipboard will be cleared in %d seconds" % interval)
+    sleep(interval)
+    cmd1 = 'echo -n "" | xclip -selection clipboard'
+    os.system(cmd1)
+
+
 def edit_index(index=None):
 
     """
@@ -886,13 +907,13 @@ def edit_index(index=None):
         else:
             print('%s %s' % (category_name, data[i]))
         
-        cursor.hide()
+        cursor_hide()
 
         while (True):
             char = getch()
         
             if (char == 'e' or char == 'E'):
-                cursor.show()
+                cursor_show()
                 if (i == 6):
                     print_block(1)
                     data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", False)
@@ -905,7 +926,7 @@ def edit_index(index=None):
                     data_changed = True
                     print_block(1)
                     break
-                    cursor.hide()
+                    cursor_hide()
             elif (char == '\n'):
                 break
             elif (char == 'q' or char == 'Q'):
@@ -927,7 +948,7 @@ def edit_index(index=None):
         database_handler.write_encrypted_database(file_path)
         
 
-    cursor.show()
+    cursor_show()
     print_block(2)
     print(color_menu_bars())
     print_block(1)
@@ -1100,6 +1121,24 @@ def prompt_password_once():
     return value
 
 
+def prompt_password_gui():
+
+    app = wx.App()
+
+    frame = wx.Frame(None, title='pwmgr')
+
+    t_entry = wx.TextEntryDialog(frame, 'Enter Master Password: ', caption='pwmgr',
+            style=wx.TE_PASSWORD|wx.CENTRE|wx.OK|wx.CANCEL, value='')
+    
+    if (t_entry.ShowModal() == wx.ID_OK and t_entry.GetValue() != ''):
+        pwd = t_entry.GetValue()
+        t_entry.Destroy()
+        return pwd
+    else:
+        t_entry.Destroy()
+        return False
+
+
 def prompt_yes_no(question="", default=True):
     """
     Asks yes/no & returns a boolean value.
@@ -1146,6 +1185,14 @@ def prompt_yes_no_blank(question=""):
 #===========================================================================
 #                           Printing functions                             #
 #===========================================================================
+
+
+def cursor_hide():
+    print("\033[?25l")
+
+
+def cursor_show():
+    print("\033[?25h")
 
 
 def text_color_error(text=''):
@@ -1415,24 +1462,40 @@ def print_block(n=3):
 
 def print_header():
 
-    global __title, __version__, __last_updated__, __email__
+    global __title, __version__, __last_updated__
 
     header = \
     """
-    ==========================================================
+    ==================================================================
                                                               
-                          %s                         
-                                                              
-                          (version: %s)                      
-                                                              
-                      %s
-                                                              
-                      Last Updated:  %s                       
-                                                              
-    ==========================================================""" \
-            % (__title__,__version__,__email__,__last_updated__)
+
+                            %s 
+
+                            Version:  %s
+
+                            Updated:  %s                       
+
+
+    ==================================================================""" \
+            % (text_highlight(__title__),__version__,__last_updated__)
 
     print(text_highlight(header))
+
+
+def print_support():
+
+    global __email__
+
+    support_info = \
+    """
+    ==================================================================
+                                                              
+       For bug reports / support, contact: %s 
+
+    ==================================================================""" \
+            % (text_highlight(__email__))
+
+    print(support_info)
 
 
 def print_help():
@@ -1580,6 +1643,7 @@ def print_help():
 
     """)
 
+    print_support()
 
 
 #===========================================================================
@@ -2078,14 +2142,14 @@ def search_bar_show():
     print(color_menu_bars())
     print_block(1)
     show_index(index)
-    cursor.hide()
+    cursor_hide()
 
     try:
         x = input()
-        cursor.show()
+        cursor_show()
         sys.exit(0)
     except (KeyboardInterrupt):
-        cursor.show()
+        cursor_show()
         sys.exit(0)
 
 
@@ -2109,7 +2173,7 @@ def search_bar_copy():
     if (index == None):
         sys.exit(1)
 
-    copy_to_clipboard_index(index)
+    copy_password(index)
 
 
 
@@ -2133,7 +2197,7 @@ def menu_generate_password():
     
     enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ")
     
-    cursor.hide()
+    cursor_hide()
 
     while (pwd == ''):
         password_list = gen_pass_secure(length, False, True, enable_symbols)
@@ -2165,7 +2229,7 @@ def menu_generate_password():
                     pwd = password
                     break
                 elif (char == 'q' or char == 'Q'):
-                    cursor.show()
+                    cursor_show()
                     print_block()
                     sys.exit(1)
                 else:
@@ -2174,7 +2238,7 @@ def menu_generate_password():
             if (pwd != ''):
                 break
 
-    cursor.show()
+    cursor_show()
 
     return pwd
 
@@ -2196,7 +2260,7 @@ def menu_generate_password_standalone():
     
     enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ")
     
-    cursor.hide()
+    cursor_hide()
 
     while (pwd == ''):
         password_list = gen_pass_secure(length, False, True, enable_symbols)
@@ -2225,7 +2289,7 @@ def menu_generate_password_standalone():
                 if (char == 'g' or char == 'G'):
                     break
                 elif (char == 'q' or char == 'Q'):
-                    cursor.show()
+                    cursor_show()
                     print_block()
                     sys.exit(1)
                 else:
@@ -2234,7 +2298,7 @@ def menu_generate_password_standalone():
             if (pwd != ''):
                 break
 
-    cursor.show()
+    cursor_show()
 
 
 def update_progress_bar_classic(index=1,index_range=10, left_indent=10,
@@ -2384,7 +2448,7 @@ def crawl_directory(path=''):
 
 def parse_pass():
 
-    cursor.hide()
+    cursor_hide()
 
     dir_path = get_pass_directory()
 
@@ -2435,7 +2499,7 @@ def parse_pass():
         if ('Generated_Password_for_' in new_list[i][1]):
             new_list[i][1] = new_list[i][1].split('Generated_Password_for_')[1]
 
-    cursor.show()
+    cursor_show()
 
     #for item in new_list:
     #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))

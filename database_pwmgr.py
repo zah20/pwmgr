@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.5.0'
-__last_updated__ =  '12/2/2021'
+__version__      =  '1.6.0'
+__last_updated__ =  '11/04/2021'
 __license__      =  'GPLv3'
 
 
@@ -299,6 +299,7 @@ class ManageRecord():
         self.__salt_length = 32
         self.__hash_length = 64 # SHA-256
         self.__user_password = ''
+
 
     def print_data(self, item_list=None):
 
@@ -916,6 +917,7 @@ class ManageRecord():
                 record_object.set_username(record[2])
                 self.__record_list.append(record_object)
                 self.sort()
+
         else:
             for record in csv_list:
                 record_object = Record(record[0], record[1], record[2])
@@ -1433,6 +1435,7 @@ class ManageRecord():
 
         self.convert_csvlist_to_record(data_list)
 
+
         ## Debug
         #st6 = time()
         #print("convert_csvlist_to_record(), time taken: %.3fs" % (st6-st5))
@@ -1582,24 +1585,24 @@ class ManageRecord():
 
 
 class DatabaseEmptyException(Exception):
-    def __init__(self, msg='No record exists'):
+    def __init__(self, msg="No record exists"):
         super(DatabaseEmptyException, self).__init__(msg)
 
-class NoKeyFoundException(Exception):
-    def __init__(self, msg="Key doesn't exist"):
-        super(NoKeyFoundException, self).__init__(msg)
-
 class DatabaseFileNotFoundException(Exception):
-    def __init__(self, msg="database file not found"):
+    def __init__(self, msg="Database file not found"):
         super(DatabaseFileNotFoundException, self).__init__(msg)
+
+class IncorrectPasswordException(Exception):
+    def __init__(self, msg="Decryption of database failed as password is incorrect"):
+        super(IncorrectPasswordException, self).__init__(msg)
 
 class IntegrityCheckFailedException(Exception):
     def __init__(self, msg="Database file potentially corrupted"):
         super(IntegrityCheckFailedException, self).__init__(msg)
 
-class IncorrectPasswordException(Exception):
-    def __init__(self, msg="Decryption of database failed as password is incorrect"):
-        super(IncorrectPasswordException, self).__init__(msg)
+class NoKeyFoundException(Exception):
+    def __init__(self, msg="Key doesn't exist"):
+        super(NoKeyFoundException, self).__init__(msg)
 
 class UnsupportedFileFormatException(Exception):
     def __init__(self, msg="Unsupported file format detected"):
