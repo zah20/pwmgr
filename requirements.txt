@@ -1,5 +1,2 @@
-colorama
-cursor
-fernet
 getch
-pyperclip
+fernet
