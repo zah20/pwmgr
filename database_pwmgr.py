@@ -36,19 +36,12 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.9.0'
-__last_updated__ =  '01/23/2023'
+__version__      =  '2.1'
+__last_updated__ =  '02/26/2023'
 __license__      =  'GPLv3'
 
 
 class Record():
-
-    """
-    TODO: Version 2.0
-         1) Switch to pycrypto encryption library
-         2) Replace PBKDF2 with Scrypt function
-         3) Upgrade pw audit metrics 
-    """
 
     def __init__(self, website='', password='', last_modified=''):
 
@@ -987,26 +980,24 @@ class ManageRecord():
         return csv_list
 
 
-    def convert_csvlist_to_record(self, csv_list=[], \
-            import_brief=False, used_by_load_database=False):
+    def convert_csvlist_to_record(self, csv_list=[], used_by_load_database=False):
             
         
         """
         Converts all entries in csv formatted list
         to a list of Record objects
 
-        Args:    1) A list of str 
-                 2) This field can be set to True if we want to import 
-                    only site,pass,username field. This is useful when 
-                    importing data from other pw managers & is used only
-                    by frontend (bool, default: False)
+        Args:    1) A list of str list
+                 2) Boolean value whether this function is called
+                    by the database internally (skips certain operations)
         
-        Returns: N/A
+        Returns: True if operation succeeds or
+                  raises UnsupportedFileFormatException if it fails
 
         Remarks: We intentionally do not check for duplicates 
                  as we assume that the user knows what they're doing.
-                 It is most likely to be used when a new user is 
-                 migrating to pwmgr & don't have anything setup yet.
+
+                 * Called by frontend when user is importing a new csv database
         
         """
 
@@ -1017,7 +1008,24 @@ class ManageRecord():
 
         r_l = len(csv_list[0])
 
-        if (import_brief):
+        if (r_l == 2):
+
+            for record in csv_list:
+
+                pw = ''
+
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
+
+                record_object = Record(record[0], pw)
+                self.__record_list.append(record_object)
+                self.sort()
+
+            return True
+
+        elif (r_l == 3):
 
             for record in csv_list:
 
@@ -1032,6 +1040,47 @@ class ManageRecord():
                 record_object.set_username(record[2])
                 self.__record_list.append(record_object)
                 self.sort()
+
+            return True
+
+        elif (r_l == 4):
+
+            for record in csv_list:
+
+                pw = ''
+
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
+
+                record_object = Record(record[0], pw)
+                record_object.set_username(record[2])
+                record_object.set_email(record[3])
+                self.__record_list.append(record_object)
+                self.sort()
+
+            return True
+
+        elif (r_l == 5):
+
+            for record in csv_list:
+
+                pw = ''
+
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
+
+                record_object = Record(record[0], pw)
+                record_object.set_username(record[2])
+                record_object.set_email(record[3])
+                record_object.set_remark(record[4])
+                self.__record_list.append(record_object)
+                self.sort()
+
+            return True
 
         elif (r_l == 10):
 
@@ -1053,6 +1102,8 @@ class ManageRecord():
                 record_object.set_recovery_email(record[8])
                 record_object.set_phone_number(record[9])
                 self.__record_list.append(record_object)
+
+            return True
 
         elif (r_l == 14):
 
@@ -1078,6 +1129,8 @@ class ManageRecord():
                 record_object.set_pw_complexity(record[12])
                 record_object.set_security_rating(record[13])
                 self.__record_list.append(record_object)
+
+            return True
 
         else:
             raise UnsupportedFileFormatException('[!] The database format is not supported. ' + \
@@ -1707,7 +1760,7 @@ class ManageRecord():
             #st5 = time()
             #print("read_csv_in_memory(), time taken: %.3fs" % (st5-st4))
 
-            self.convert_csvlist_to_record(data_list, False, True)
+            self.convert_csvlist_to_record(data_list, True)
 
             ## Debug
             #st6 = time()
@@ -1875,7 +1928,7 @@ class ManageRecord():
             #st4 = time()
             #print("read_csv_in_memory(), time taken: %.3fs" % (st4-st3))
 
-            self.convert_csvlist_to_record(data_list, False, True)
+            self.convert_csvlist_to_record(data_list, True)
 
             if (len(self.__record_list) != 0):
                 try:
@@ -2447,6 +2500,31 @@ class ManageRecord():
             return 'u'
         elif (c in self.__num):
             return 'n'
+
+#===========================================================================
+#               New Security Related Functions for PWMGR 2.0               #
+#===========================================================================
+
+def generate_master_key(key=''):
+
+    if (key == ''):
+        raise InvalidParameterException('generate_master_key(): key parameter cannot be empty')
+    elif(type(key) != str):
+        raise TypeError('generate_master_key(): Key needs to be of type str')
+
+    temp_key = scrypt(bytes(key, 'utf-8'), '', 16, N=2**23, r=8, p=1)  
+
+    return temp_key 
+
+
+def verify_key(pw_hash='', key=''):
+
+    if (key == '' or pw_hash == ''):
+        raise InvalidParameterException()
+
+    global kdf_handler
+
+    kdf_handler.verify(pw_hash, key)
 
 
 #===========================================================================

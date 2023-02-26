@@ -38,27 +38,128 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '1.9.0'
-__last_updated__ =  '01/23/2023'
+__version__      =  '2.1'
+__last_updated__ =  '02/26/2023'
 __license__      =  'GPLv3'
 
 
 global enc_db_handler, app_name, file_name, pw_master, \
-        password_in_keyring, term_length_fixed, db_file_path, \
-        theme, config, config_file
+        password_in_keyring, term_len_h, db_file_path, \
+        theme, field_color_fg, config, config_file
 
 # All configs / database is stored under '~/.config/pwmgr/'
 password_in_keyring=False
-term_length_fixed = 75
 enc_db_handler = None
 file_name = 'db.enc'
 app_name = 'pwmgr'
+term_len_h = 75
 pw_master = ''
 config = {}
 theme = 1
 config_file = ''
 db_file_path = ''
+field_color_fg = ''
 
+
+"""
+    TODO: 
+
+    Version 2.6 (Maybe 2024, if there's no Worldwar..let's see -.-)
+    ===============================================================
+
+    [ ] ** Upgraded searchbar-copy
+
+        [ ] Set an additional attribute that tracks which is the primary
+            field for a website
+        
+        [ ] Set primary attribute for a record when adding it or 
+            option to change it by using edit command
+
+        [ ] When you select a record it copies username/email for the
+            site depending on primary field that was set. 
+            The software wait a specified interval that can be 
+            configured (default 3s), after which it copies the 
+            password for that record (makes a background sound to
+            let you know that password has been copied)
+
+        [ ] Sound effects indicating username has been selected
+
+        [ ] Sound effects indicating password has been selected
+
+    [ ] Switch to pycrypto encryption library
+
+    [ ] Replace PBKDF2 with Scrypt function
+
+    [ ] Upgraded searchbar-show
+
+        [ ] When screen is zoomed in or >= 50% screen size, 
+               the color scheme becomes black & white (x-ray effect)
+       
+        [ ] In x-ray mode (zoomed in) the audit metrics for a record
+            are applied to the password & last mod field with 
+            respective colors
+        
+        [ ] Sound effect when a record is selected in search bar
+
+        [ ] Sound effect when a screen goes into x-ray mode
+
+        [ ] Sound effect when a screen goes out of x-ray mode
+
+    [ ] Password generation function UI upgrade 
+
+        [ ] Fade in / fade out effect on password generator buttons
+              when they are pressed customized for themes
+
+        [ ] Blink / Highlight of generated password 
+
+    [ ] Proper alignment of headers with data field for show summary
+        function when screen size is zoomed in. We use ratio which
+        is not always that accurate
+
+    [ ] Option to generate hybrid, human memorable passwords based 
+        on a combination of dictionary & randomness
+
+    [ ] When master password is being chosen, show the password
+           strength of the chosen password. Do not allow weak passwords
+           to be set. Provide option to retry with another password or suggest 
+           a master password (using memorable password)
+    
+    [ ] Upgrade search bar so that it shows most frequently used
+        sites first
+
+           [ ] Create an attribute that tracks how many times 
+               a record has been used
+
+    [ ] Upgraded existing pw audit metrics &
+
+        Tests whether any of your passwords
+          are found in leaked password databases
+          online as part of audit function (additional metric)
+
+        * Audit function will store all information for future
+          use instead of having to manually calculate it everytime
+
+        * Everytime passwords are updated it'll silently recalculate
+          the new metrics for the record in the background.
+
+        * You can manually add more known pw databases as you like
+
+    [ ] Show usage patterns of sites for the week, month or year 
+         in the form of graphs and charts
+
+    [ ] Improve search function by implementing binary search
+    
+    [ ] Option to delete a range of fields using '-' symbol
+        along with commas supported values
+        e.g: 'pwmgr -d 1-30'
+
+
+    Version 3.0 (TBD ??)
+    ==================================================
+
+    [ ] Switch to custom crypto algorithm that replaces AES, don't ask why
+
+"""
 
 #===========================================================================
 #                Database polling & argument parsing functions             #
@@ -72,7 +173,7 @@ def parse_args():
 
     """
 
-    global term_length_fixed, config, theme
+    global term_len_h, config, theme, field_color_fg
 
     argument_length = len(sys.argv)
 
@@ -84,9 +185,9 @@ def parse_args():
     else:
 
         try:
-            term_length_fixed = os.get_terminal_size()[0]
+            term_len_h = os.get_terminal_size()[0]
         except (OSError):
-            term_length_fixed = 100
+            term_len_h = 100
 
         if (check_if_prog_exists(['keyctl'])[0] == False): 
             print(text_error('The program keyctl was not found. It is required to store & manage keys on a system running systemd'))
@@ -106,16 +207,22 @@ def parse_args():
 
         if (_theme == 1):
             theme = color_theme_1()
+            field_color_fg = '\x1B[1;38;5;25m'
         elif (_theme == 2):
             theme = color_theme_2()
+            field_color_fg = '\x1B[1;38;5;30m'
         elif (_theme == 3):
             theme = color_theme_3()
+            field_color_fg = '\x1B[1;38;5;214m'
         elif (_theme == 4):
             theme = color_theme_4()
+            field_color_fg = '\x1B[1;38;5;24m'
         elif (_theme == 5):
             theme = color_theme_5()
+            field_color_fg = '\x1B[1;38;5;130m'
         elif (_theme == 6):
             theme = color_theme_6()
+            field_color_fg = '\x1B[1;38;5;24m'
         else:
             theme = color_theme_1()
 
@@ -219,7 +326,7 @@ def parse_args():
 
             elif (sys.argv[1] == 'audit' or sys.argv[1] == '--audit'):
 
-                if (term_length_fixed < 100):
+                if (term_len_h < 100):
                     print(text_error('Screen size too small to display data'))
                     sys.exit(1)
 
@@ -257,7 +364,6 @@ def parse_args():
                 sys.exit(0)
 
             else:
-
                 print(text_error("The selected option doesn't exist"))
                 sys.exit(1)
 
@@ -446,7 +552,7 @@ def parse_args():
             elif ((sys.argv[1] == 'audit' or sys.argv[1] == '--audit' and \
                     (sys.argv[2] == 'sort-asc' or sys.argv[2] == 'sort-dsc'))):
 
-                if (term_length_fixed < 100):
+                if (term_len_h < 100):
                     print(text_error('Screen size too small to display data'))
                     sys.exit(1)
 
@@ -505,6 +611,7 @@ def parse_args():
                     else:
                         print(text_error("Requires a file name"))
                         sys.exit(1)
+
             else:
                 print(text_error("The selected option doesn't exist"))
                 sys.exit(1)
@@ -821,9 +928,6 @@ def keyring_get():
     cmd1 = 'keyctl request user %s' % (app_name)
     stdout,stderr,rc = run_cmd(cmd1)
 
-    #print("stdout: %s" % stdout)
-    #print("stderr: %s" % stderr)
-
     if (stderr):
         return False
 
@@ -1085,9 +1189,9 @@ def audit_records(sort_ascending=True):
     """
     ## Requires >= 100 width term, this check is 
     ## being done by arg_parser() so skipping this one
-    #global term_length_fixed
+    #global term_len_h
 
-    #if (term_length_fixed < 100):
+    #if (term_len_h < 100):
     #    print(text_error('Screen size too small to display data'))
     #    sys.exit(1)
 
@@ -1354,7 +1458,6 @@ def show_index(index=None, display_multiple_index=False):
         return
 
     r = enc_db_handler.get_index(index)
-    #pw = enc_db_handler.get_pw_of_index(index)
 
     header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
             'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
@@ -1366,17 +1469,70 @@ def show_index(index=None, display_multiple_index=False):
     
     if (not display_multiple_index):
         print_block(1)
-        print(color_menu_bars())
+        # print(color_menu_bars())
+        print(plain_menu_bars())
         print_block(1)
 
         display_row(header, data)
 
         print_block(1)
-        print(color_menu_bars())
+        # print(color_menu_bars())
+        print(plain_menu_bars())
         print_block(1)
     else:
         display_row(header, data)
 
+
+def get_record_at_index(index=None):
+
+    """
+    Display the record at the specified index from database
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler
+
+    if (index == None):
+        return
+
+    r = enc_db_handler.get_index(index)
+
+    header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
+            'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
+
+    data = [r.get_website(), r.get_password(), r.get_email(), r.get_username(), \
+            r.get_group(), r.get_phone_number(), r.get_two_factor(), \
+            r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
+
+    return header, data
+
+
+def show_index_static(header=[], data=[], display_multiple_index=False):
+
+    """
+    Display a record without touching database
+
+    """
+
+    if (len(header) == 0 or len(data) == 0):
+        return
+
+    if (not display_multiple_index):
+        print_block(1)
+        # print(color_menu_bars())
+        print(plain_menu_bars())
+        print_block(1)
+
+        display_row(header, data)
+
+        print_block(1)
+        # print(color_menu_bars())
+        print(plain_menu_bars())
+        print_block(1)
+    else:
+        display_row(header, record_info)
     
 
 def show_index_multiple(index_list=None):
@@ -1388,10 +1544,11 @@ def show_index_multiple(index_list=None):
 
     """
 
-    global term_length_fixed
+    global term_len_h
 
     print_block(1)
-    print(color_menu_bars())
+    # print(color_menu_bars())
+    print(plain_menu_bars())
     print_block(1)
 
     for i in index_list:
@@ -1402,12 +1559,13 @@ def show_index_multiple(index_list=None):
             pass
         else:
             print()
-            s = '-' * term_length_fixed
+            s = '-' * term_len_h
             print(s)
             print()
 
     print_block(1)
-    print(color_menu_bars())
+    # print(color_menu_bars())
+    print(plain_menu_bars())
     print_block(1)
 
 
@@ -1465,12 +1623,21 @@ def copy_password(index=None):
     #r = enc_db_handler.get_index(index)
     #pwd = r.get_password()
 
-    pw = enc_db_handler.get_pw_of_index(index)
+    try:
 
-    cmd1 = "echo -n '%s' | xclip -selection clipboard" % pw
-    os.system(cmd1)
+        pw = enc_db_handler.get_pw_of_index(index)
 
-    clear_clipboard()
+        if ('"' in pw):
+            pw = escape_str(pw, "'")
+
+        cmd1 = 'echo -n \'%s\' | xclip -selection clipboard' % pw
+        os.system(cmd1)
+
+        clear_clipboard()
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
 
 
 def clear_clipboard():
@@ -2571,21 +2738,40 @@ def text_debug(text=''):
 
 def color_menu_bars(text=' '):
 
-    global term_length_fixed, theme
+    global term_len_h, theme
 
-    text = text * term_length_fixed
+    text = text * term_len_h
     rst = color_reset()
     text =  theme + text + rst
 
     return text
 
 
+def plain_menu_bars(text='-'):
+
+    global term_len_h
+
+    text = text * term_len_h
+
+    return text
+
+
+def color_menu_bars_dynamic(text=' ', term_len=[100,100]):
+
+    global theme
+
+    text = text * term_len
+    rst = color_reset()
+    text =  theme + text + rst
+
+    return text
+
 def color_menu_text(text=''):
 
-    global term_length_fixed
+    global term_len_h
 
     text_size = len(text)
-    remaining_length = int(term_length_fixed - text_size)
+    remaining_length = int(term_len_h - text_size)
 
     left  = 0
     right = 0
@@ -2619,9 +2805,9 @@ def color_menu_informational(text='', left_indent=0):
 
 def color_menu_column_header(header_list=[], left_indent=7):
 
-    global term_length_fixed, theme
+    global term_len_h, theme
 
-    text  = ' '*(term_length_fixed-left_indent)
+    text  = ' '*(term_len_h-left_indent)
 
     text_list = list(text)
 
@@ -2665,7 +2851,7 @@ def color_menu_column_header(header_list=[], left_indent=7):
 
 def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
 
-    global term_length_fixed
+    global term_len_h
     
     # Format (data_list)  = '#', 'Site', 'Username', 'Email', 'Group'
 
@@ -2674,12 +2860,12 @@ def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
 
     number_indent = 7
 
-    text  = ' '*(term_length_fixed - number_indent)
+    text  = ' '*(term_len_h - number_indent)
 
     text_list = list(text)
 
     if (len(data_list) == 0):
-        text = ' '*term_length_fixed + color_reset()
+        text = ' '*term_len_h + color_reset()
         return text
 
     ratio_total = 0
@@ -2738,7 +2924,7 @@ def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
 
 def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
 
-    global term_length_fixed
+    global term_len_h
     
     # Format (data_list)  = '#', 'Site', 'pw str', 'pw age', 'pw reuse', 'sec rating'
     # width of index is fixed at 6 chars, & ratio parameter is used to 
@@ -2746,12 +2932,12 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
 
     number_indent = 7
 
-    text  = ' '*(term_length_fixed - number_indent)
+    text  = ' '*(term_len_h - number_indent)
 
     text_list = list(text)
 
     if (len(data_list) == 0):
-        text = ' '*term_length_fixed + color_reset()
+        text = ' '*term_len_h + color_reset()
         return text
 
     ratio_total = 0
@@ -2818,8 +3004,6 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
             list_to_be_processed.append(l)
 
     color_rst = color_reset()
-    #print(len(list_to_be_processed))
-    #print(list_to_be_processed)
     
     text = color_b('yellow') + ''.join(str_list) + color_rst + \
             data_list[1][1] + ''.join(list_to_be_processed[0]) + color_rst + \
@@ -2833,12 +3017,12 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
 
 def display_row(field_list=[], data_list=[], header_width=20, indent=5):
 
-    global term_length_fixed, theme
+    global term_len_h, theme, field_color_fg
     
     if (len(data_list) == 0 or len(field_list) == 0):
         return 
 
-    if (term_length_fixed < 50):
+    if (term_len_h < 50):
         print(text_error('Terminal size too small to display data'))
         sys.exit(1)
 
@@ -2848,20 +3032,14 @@ def display_row(field_list=[], data_list=[], header_width=20, indent=5):
         if (len(data_list[i]) > max_length):
             max_length = len(data_list[i])
 
-    if (max_length > (term_length_fixed-header_width-indent)):
-        print(text_error('Terminal size too small to display data'))
-        sys.exit(1)
-
     indent_text = ' ' * indent
-
-    color_field = '\x1B[1;38;5;220m' 
 
     for i in range(len(data_list)):
 
         h_list = list(' ' * header_width)
         
         # text_list is the remaining data + space after header field
-        text_list  = list(' '*(term_length_fixed - indent - header_width)) 
+        text_list = []
         
         field = '%s ' % field_list[i]
         f_list_char = list(field)
@@ -2870,16 +3048,64 @@ def display_row(field_list=[], data_list=[], header_width=20, indent=5):
         for j in range(len(f_list_char)):
             h_list[j] = f_list_char[j]
         
-        for k in range(len(d_list_char)):
-            text_list[k] = d_list_char[k]
+        text = ''
+
+        text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
+
+        if (len(text_l_obj) <= 0):
+            print(text_error('Terminal size too small to display data'))
+            sys.exit(1)
+
+        if (len(d_list_char) > len(text_l_obj)):
+
+            current_index = 0
+
+            while (current_index < len(d_list_char)):
+
+                for l in range(0, len(text_l_obj)):
+
+                    if (current_index >= len(d_list_char)):
+                        break
+
+                    text_l_obj[l] = d_list_char[current_index]
+                    current_index += 1
+
+                text_list.append(text_l_obj)
+                text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
+
+            text = field_color_fg + indent_text + \
+                    text_highlight(''.join(h_list)) + color_reset() + ''.join(text_list[0]) + \
+                    color_reset()
+
+            print(text)
+
+            blank_header = h_list  
+
+            for crab_c in range(len(blank_header)):
+
+                blank_header[crab_c] = ' '
+
+            blank_header = ''.join(blank_header)
+
+            for line in text_list[1:]:
+
+                text = field_color_fg + indent_text + \
+                        blank_header + color_reset() + ''.join(line) + \
+                        color_reset()
         
+                print(text)
+
+        else:
+
+            for k in range(len(d_list_char)):
+                text_l_obj[k] = d_list_char[k]
         
-        text = color_field + indent_text + \
-                ''.join(h_list) + color_reset() + ''.join(text_list) + \
-                color_reset()
+            text = field_color_fg + indent_text + \
+                    text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
+                    color_reset()
         
-        print(text)
-        
+            print(text)
+
 
 def color_symbol_info():
 
@@ -2910,263 +3136,248 @@ def print_block(n=3):
 
 def print_header():
 
-    global __title, __version__, __last_updated__
+    global __title, __version__
+
+    txt_color = '\x1B[1;38;5;87m' 
 
     header = \
     """
     ------------------------------------------------------------------
-                                                              
 
-                            %s%s%s
 
-                            Version: %s
-
-                            Updated: %s                       
+                            %s%s %s%s%s
 
 
     ------------------------------------------------------------------""" \
-            % ('\x1B[1;38;5;87m', text_highlight(__title__), color_reset(), \
-            __version__,__last_updated__)
+            % (txt_color, text_highlight(__title__), \
+            txt_color, text_highlight(__version__), color_reset())
 
     print(text_highlight(header))
-
-
-def print_contact():
-
-    global __email__
-
-    support_info = \
-    """
-    ------------------------------------------------------------------
-                                                              
-         For bug reports, please contact: %s 
-
-    ------------------------------------------------------------------""" \
-            % (text_highlight(__email__))
-
-    print(support_info)
 
 
 def print_help():
 
     print_header()
 
+    txt_color = '\x1B[1;38;5;249m'
+
     print(
     """
 
-    %s[add, -a]%s
+    %s[add, -a]
 
-         Allows the user to add a new record to the database
-
-
-    %s[edit, -e] %s[record number]%s
-
-         Allows the user to edit the specified entry in the database
+         %sAllows the user to add a new record to the database%s
 
 
-    %s[search, -s] [group | site | email | username | all] %s[keyword]%s
+    %s[edit, -e] %s[record number]
 
-         Search by group, site, ..., etc. 
+         %sAllows the user to edit the specified entry in the database%s
 
-         All records that match the specified keyword will be shown 
 
-         * By default the search keyword without any other additional
-           parameters uses the 'search all' function
+    %s[search, -s] [group | site | email | username | all] %s[keyword]
+
+         %sSearch by group, site, ..., etc. 
+
+         %sAll records that match the specified keyword will be shown 
+
+         %s* By default the search keyword without any other additional
+         %s  parameters uses the 'search all' function
          
-         group     - Search for the keyword by group 
-         site      - Search for the keyword by website 
-         email     - Search for the keyword by email address
-         username  - Search for the keyword by username
-         all       - Search for the keyword in in all of the
-                     above categories
+         %sgroup     - Search for the keyword by group 
+         %ssite      - Search for the keyword by website 
+         %semail     - Search for the keyword by email address
+         %susername  - Search for the keyword by username
+         %sall       - Search for the keyword in in all of the
+         %s            above categories%s
 
 
-    %s[show, -o] %s[record number]%s
+    %s[show, -o] %s[record number]
 
-         Show details about the specific record from the database
+         %sShow details about the specific record from the database
 
-         * Without a record number (pwmgr -o), the show command 
-           displays a brief summary of the entire database
+         %s* Without a record number (pwmgr -o), the show command 
+         %s  displays a brief summary of the entire database
 
-         * Multiple comma separated values can also be passed 
-           to the show command, e.g: 'pwmgr -o 1,2,3'
+         %s* Multiple comma separated values can also be passed 
+         %s  to the show command, e.g: 'pwmgr -o 1,2,3'%s
 
 
-    %s[show-searchbar, -O]%s
+    %s[show-searchbar, -O]
         
-         Search & display record using search bar 
+         %sSearch & display record using search bar%s
 
 
-    %s[show-recent, -sr]%s
+    %s[show-recent, -sr]
     
-         Show all entries from database sorted by most recently updated
-
-         * Can be useful to check which entries got recently added
+         %sShow all entries from database sorted by most recently updated%s 
 
 
-    %s[copy, -c] %s[record number]%s
+    %s[copy, -c] %s[record number]
 
-         Copies the password for the specific entry to the clipboard
+         %sCopies the password for the specific entry to the clipboard%s 
     
 
-    %s[copy-searchbar, -C]%s
+    %s[copy-searchbar, -C]
         
-         Searches for record using search bar & copies password to clipboard
+         %sSearches for record using search bar & copies password to clipboard%s 
           
 
-    %s[remove, -d] %s[record number]%s
+    %s[remove, -d] %s[record number]
 
-         Remove the specified entry from the database
+         %sRemove the specified entry from the database
 
-         * This command also accepts comma separated values & 
-           can remove multiple entries. e.g: 'pwmgr -d 55,48'
-
-
-    %s[generate-pw, -g]%s
-
-         Grants access to the password generator
+         %s* This command also accepts comma separated values & 
+         %s  can remove multiple entries. e.g: 'pwmgr -d 55,48'%s
 
 
-    %s[generate-keyfile, -gk] %s[file path]%s
+    %s[generate-pw, -g]
+
+         %sGrants access to the password generator%s 
+
+
+    %s[generate-keyfile, -gk] %s[file path]
         
-         Allows the user to generate a secure, pseudo random keyfile
+         %sAllows the user to generate a secure, pseudo random keyfile
 
-         * If a path is not provided, the key file is saved in 
-           '~/.config/pwmgr' directory
-
-
-    %s[use-keyfile, -uk] %s[file path]%s
-
-         Add key file to compliment the master password
-
-         * If a path is not provided, pwmgr will search for key file
-           in '~/.config/pwmgr' directory 
-
-         * This function can also be used to change an existing keyfile 
+         %s* If a path is not provided, the key file is saved in 
+         %s  '~/.config/pwmgr' directory%s 
 
 
-    %s[list-keyfile, -lk] [brief | full]%s
+    %s[use-keyfile, -uk] %s[file path]
 
-         List the keyfile that is currently being used by the database
+         %sAdd key file to compliment the master password
 
-         * Option brief shows the last 50 bits of base64 encoded keyfile 
-           whereas full option displays the complete form. If no option 
-           is specified, brief is used
+         %s* If a path is not provided, pwmgr will search for key file
+         %s  in '~/.config/pwmgr' directory 
+
+         %s* This function can also be used to change an existing keyfile%s
+
+
+    %s[list-keyfile, -lk] [brief | full]
+
+         %sList the keyfile that is currently being used by the database
+
+         %s* Option brief shows the last 50 bits of base64 encoded keyfile 
+         %s  whereas full option displays the complete form. If no option 
+         %s  is specified, brief is used%s
         
 
-    %s[remove-keyfile, -rk]%s
+    %s[remove-keyfile, -rk]
 
-         Removes the existing key file that is being used by the database
+         %sRemoves the existing key file that is being used by the database
 
-         * Without a key file, only master password will be used for 
-           encryption / decryption of database
+         %s* Without a key file, only master password will be used for 
+         %s  encryption / decryption of database%s
 
 
-    %saudit [sort-asc | sort-dsc]%s
+    %saudit [sort-asc | sort-dsc]
 
-         Performs a security audit on all records & reports 
-         the overall security posture. Factors such as password 
-         complexity, whether the password was reused in another
-         record and password age is used to determine the overall 
-         risk of using that password
+         %sPerforms a security audit on all records & reports 
+         %sthe overall security posture. Factors such as password 
+         %scomplexity, whether the password was reused in another
+         %srecord and password age is used to determine the overall 
+         %srisk of using that password
  
-         * If sort-asc or sort-dsc is specified, the records are 
-           sorted in ascending or descending order respectively
+         %s* If sort-asc or sort-dsc is specified, the records are 
+         %s  sorted in ascending or descending order respectively%s
 
 
-    %spw-reset%s
+    %spw-reset
 
-         Allows the user to change the master password
-
-
-    %skey-show%s
-
-         Displays the current master key that is being used 
-         for encryption / decryption
+         %sAllows the user to change the master password%s
 
 
-    %skeyring-reset%s
+    %skey-show
 
-         Allows the user to remove password from keyring
-
-         * This command can be useful for example if you have 
-           a different password database & you want to remove
-           the previous password that was set on the keyring
+         %sDisplays the current master key that is being used 
+         %sfor encryption / decryption%s
 
 
-    %simport pass%s
+    %skeyring-reset
+
+         %sAllows the user to remove password from keyring
+
+         %s* This command can be useful for example if you have 
+         %s  a different password database & you want to remove
+         %s  the previous password that was set on the keyring%s
+
+
+    %simport pass
          
-         Scans for Pass (Unix Password Manager) password store & imports all 
-         relevant information. Pass needs to be unlocked & accessible via 
-         commandline for this to work
+         %sScans for Pass (Unix Password Manager) password store & imports all 
+         %srelevant information. Pass needs to be unlocked & accessible via 
+         %scommandline for this to work,phone_number 
 
-         * This feature is experimental, needs more thorough testing
+         %s* This feature is experimental, needs more thorough testing%s
 
 
-    %sconvert-csv %s[input file] [output file]%s
+    %sconvert-csv %s[input file] [output file]
     
-         Converts an unquoted or single quoted csv file to double quoted format
+         %sConverts an unquoted or single quoted csv file to double quoted format
 
-         * Pwmgr only uses double quoted csv format internally, so if you are 
-           importing a csv database from another password manager make sure 
-           that you run this function first before trying to import it
+         %s* Pwmgr only uses double quoted csv format internally, so if you are 
+         %s  importing a csv database from another password manager make sure 
+         %s  that you run this function first before trying to import it%s
 
 
-    %sselect-cols-csv %s[order of rows] [input file] [output file]%s
+    %sselect-cols-csv %s[order of rows] [input file] [output file]
     
-         Loads csv database, selects & rearranges columns in the specified order
+         %sLoads csv database, selects & rearranges columns in the specified order
 
-         * Can also be used to remove columns that are not needed
-
-
-    %simport-csv %s[input file]%s
-
-         Imports database from csv file. Three data formats are currently supported
-
-         1) site,password,username
-
-         2) site,pass,last_modified,email,..,phone_number (10 fields)
-               * Used in pwmgr version <= 1.5
-
-         3) site,pass,last_modified,email,..,phone_number 
-            (14 fields, including security audit attributes)
-               * Used in pwmgr version >= 1.7
-
-         * When importing from csv, all fields must be enclosed in double quotes
-          
-
-    %sexport-csv %s[output file]%s
-
-         Exports all fields in the database to csv format
+         %s* Can also be used to remove columns that are not needed%s
 
 
-    %sexport-csv-brief %s[output file]%s
+    %simport-csv %s[input file]
 
-         Exports only 'site,password,username' fields to csv format
+         %sImports database from csv file, the following formats are supported:
+
+             %s1) site,password
+             %s2) site,password,username
+             %s3) site,password,username,email
+             %s4) site,password,username,email,notes
+
+             %s5) site,pass,last_modified,email,notes, ..
+
+             %s   (14 fields, including security audit attributes)
+             %s      * Used in pwmgr version >= 1.9%s
 
 
-    %shelp%s
+    %sexport-csv %s[output file]
 
-         Show this text
-    """ % (color_b('orange'), color_reset(), color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_reset(), color_b('orange'), color_reset(), 
-            color_b('orange'), color_b('yellow'), color_reset(), color_b('orange'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), color_b('orange'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_reset(), color_b('orange'), color_reset(), 
-            color_b('orange'), color_reset(), color_b('orange'), color_reset(), 
-            color_b('orange'), color_reset(), color_b('orange'), color_reset(), 
-            color_b('orange'), color_reset(), color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_b('yellow'), color_reset(), \
-            color_b('orange'), color_reset()))
+         %sExports all fields in the database to csv format%s
 
-    print_contact()
+
+    %sexport-csv-brief %s[output file]
+
+         %sExports only 'site,password,username' fields to csv format%s
+
+
+    """ % (color_b('orange'), txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,  color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color, \
+            txt_color,txt_color,txt_color,txt_color,txt_color, \
+            txt_color,txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), txt_color, color_reset(), \
+            color_b('orange'), txt_color, color_reset(), 
+            color_b('orange'), color_b('yellow'), txt_color, color_reset(), \
+                    color_b('orange'), txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color, txt_color, txt_color, color_reset(), \
+            color_b('orange'), txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), txt_color,txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), txt_color,txt_color,txt_color, color_reset(), 
+            color_b('orange'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,color_reset(), \
+                    color_b('orange'), txt_color, color_reset(), \
+            color_b('orange'), txt_color,txt_color,color_reset(), \
+            color_b('orange'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
+            color_b('orange'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,txt_color,color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,color_reset()))
 
 
 #===========================================================================
@@ -3194,6 +3405,20 @@ def parse_comma(value=''):
             return value
 
     return []
+
+
+def escape_str(s='', char="'"):
+
+    _s = ''
+
+    for i in range(len(s)):
+
+        if (s[i] == char):
+            _s += '\\'
+
+        _s += s[i]
+
+    return ''.join(_s)
 
 
 def convert_str_to_int(val=None):
@@ -3251,17 +3476,7 @@ def clear_screen():
     Clears screen, command is compatible with different OS
     """
 
-    cmd = ''
-
-    system_name = l(sys.platform)
-
-    if (system_name == 'linux' or system_name == 'darwin' \
-            or system_name == 'linux2'):
-        cmd = 'clear'
-    elif (system_name == 'win32'):
-        cmd = 'cls'
-    else:
-        cmd = 'clear'
+    cmd = 'clear'
         
     os.system(cmd)
 
@@ -3734,16 +3949,44 @@ def search_bar_show():
     
     summary_list = enc_db_handler.get_summary()
     
-    index = run_searchbar(summary_list)
+    try:
 
-    if (index == None):
+        index = run_searchbar(summary_list)
+
+        if (index == None):
+            sys.exit(1)
+
+    except ValueError:
         sys.exit(1)
 
-    show_index(index)
     cursor_hide()
 
+    global term_len_h
+
     try:
-        x = input()
+
+        header, data = get_record_at_index(index)
+
+        show_index_static(header, data)
+
+        while (True):
+
+            sleep(0.05)
+
+            try:
+
+                term_length_var = os.get_terminal_size()[0]
+
+                if (term_length_var != term_len_h):
+                    term_len_h = term_length_var
+                    clear_screen() 
+                    show_index_static(header, data)
+                else:
+                    continue
+
+            except (OSError):
+                pass
+
         cursor_show()
         sys.exit(0)
     except (KeyboardInterrupt):
@@ -3788,6 +4031,10 @@ def menu_generate_password():
     Returns: Password (str)
     """
 
+    global term_len_h
+
+    term_length_var = term_len_h
+
     color = color_b('yellow')
     rst = color_reset()
 
@@ -3802,25 +4049,31 @@ def menu_generate_password():
     cursor_hide()
 
     while (pwd == ''):
+
         password_list = gen_pass_secure(length, False, True, enable_symbols)
     
         for password in password_list:
     
+            output = detect_screen_res_change()
+
+            if (output[0]):
+                term_length_var = output[1]
+
             custom_refresh(1,0)
-            print(color_menu_bars())
-            print(color_menu_bars())
+            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var))
             print_block(5)
 
             print(color_symbol_info() + \
-                    text_highlight(" Generated password: "), text_color(password))
+                    text_highlight(" Generated password:  "), text_color(password))
     
             print_block(5)
 
-            menu_text = "  Press (G) Generate password | (S) Select | (Q) Quit  "
+            menu_text = "(G) Generate password | (S) Select | (Q) Quit"
     
-            print(color_menu_bars())
+            print(color_menu_bars_dynamic(' ', term_length_var))
             print(color_menu_text(menu_text))
-            print(color_menu_bars())
+            print(color_menu_bars_dynamic(' ', term_length_var))
 
             while (True):
                 char = getch()
@@ -3855,6 +4108,10 @@ def menu_generate_password_standalone():
     Returns: Password (str)
     """
 
+    global term_len_h
+
+    term_length_var = term_len_h
+
     color = color_b('yellow')
     rst = color_reset()
 
@@ -3868,27 +4125,33 @@ def menu_generate_password_standalone():
     
     cursor_hide()
 
+    
     while (pwd == ''):
 
         password_list = gen_pass_secure(length, False, True, enable_symbols)
     
         for password in password_list:
+
+            output = detect_screen_res_change()
+
+            if (output[0]):
+                term_length_var = output[1]
     
             custom_refresh(1,0)
-            print(color_menu_bars())
-            print(color_menu_bars())
+            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var))
             print_block(5)
 
             print(color_symbol_info() + \
-                    text_highlight(" Generated password: "), text_color(password))
+                    text_highlight(" Generated password:  "), text_color(password))
     
             print_block(5)
 
-            menu_text = "  Press (G) Generate password | (Q) Quit  "
+            menu_text = "(G) Generate password | (Q) Quit"
     
-            print(color_menu_bars())
+            print(color_menu_bars_dynamic(' ', term_length_var))
             print(color_menu_text(menu_text))
-            print(color_menu_bars())
+            print(color_menu_bars_dynamic(' ', term_length_var))
 
             while (True):
 
@@ -3907,6 +4170,26 @@ def menu_generate_password_standalone():
                 break
 
     cursor_show()
+
+
+def detect_screen_res_change():
+
+    global term_len_h
+
+    try:
+
+        term_length_var = os.get_terminal_size()[0]
+
+        if (term_length_var != term_len_h):
+            term_len_h = term_length_var
+            clear_screen() 
+            return True, term_len_h
+        else:
+            return False, term_len_h
+
+    except (OSError):
+        return False, term_len_h
+
 
 
 def generate_keyfile(file_path='', confirm=True, debug=True):
@@ -4467,28 +4750,70 @@ def import_from_csv(file_name):
 
     r = csv_list[0]
 
-    if (len(r) == 3 or len(r) == 10 or len(r) == 14):
+    if (len(r) == 2 or len(r) == 3 or len(r) == 4 or len(r) == 5 or \
+            len(r) == 10 or len(r) == 14):
 
-        if (len(r) == 3):
+        if (len(r) == 2):
             # Discarding header
+            s = ','.join(r)
+
+            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
+                    l(r[1]).strip() in ['password', 'pass', 'pwd']):
+
+                csv_list = csv_list[1:]
+
+            enc_db_handler.convert_csvlist_to_record(csv_list)
+
+        elif (len(r) == 3):
+
             s = ','.join(r)
 
             if (l(r[0]).strip() in ['site', 'website', 'address'] and \
                     l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
                     l(r[2]).strip() in ['username', 'user', 'usr']):
+
                 csv_list = csv_list[1:]
 
-            enc_db_handler.convert_csvlist_to_record(csv_list, True)
+            enc_db_handler.convert_csvlist_to_record(csv_list)
+
+        elif (len(r) == 4):
+
+            s = ','.join(r)
+
+            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
+                    l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
+                    l(r[2]).strip() in ['username', 'user', 'usr'] and \
+                    l(r[3]).strip() in ['email', 'mail']):
+
+                csv_list = csv_list[1:]
+
+            enc_db_handler.convert_csvlist_to_record(csv_list)
+
+        elif (len(r) == 5):
+
+            s = ','.join(r)
+
+            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
+                    l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
+                    l(r[2]).strip() in ['username', 'user', 'usr'] and \
+                    l(r[3]).strip() in ['email', 'mail'] and \
+                    l(r[4]).strip() in ['notes', 'comment', 'remark']):
+
+                csv_list = csv_list[1:]
+
+            enc_db_handler.convert_csvlist_to_record(csv_list)
 
         elif (len(r) == 10):
-            # Discarding header
+
             if (','.join(r) ==
                     'site,pass,last_modified,email,username,group,remark,two_factor,recovery_email,phone_number'):
+
                 csv_list = csv_list[1:]
 
-            enc_db_handler.convert_csvlist_to_record(csv_list, False)
+            enc_db_handler.convert_csvlist_to_record(csv_list)
 
         elif (len(r) == 14):
+
             header = 'site,pass,last_modified,email,username,group,remark,two_factor,recovery_email,' + \
                     'phone_number,pw_age,pw_reuse,pw_complexity,security_rating'
             
@@ -4496,9 +4821,10 @@ def import_from_csv(file_name):
 
                 csv_list = csv_list[1:]
 
-            enc_db_handler.convert_csvlist_to_record(csv_list, False)
+            enc_db_handler.convert_csvlist_to_record(csv_list)
 
         else:
+
             text_error("Unable to import database from csv file due to unsupported format")
             print_block(1)
             sys.exit(1)

@@ -1,0 +1,43 @@
+    Version 2.1
+    ===========
+
+    [x] Upgrade help text
+
+    [x] Upgrade import-csv function with more options
+
+             - Site, PW
+             - Site, PW, Username, Email
+             - Site, PW, Username, Email, Notes
+
+    UI improvements
+    ===============
+
+    [x] Automatic text adjustment due to screen resizing when using:
+
+        [x] Show command '-O'
+        [x] Password generator function standalone
+        [x] Password generator function in add function
+
+    [x] Show index function should be upgraded so that 
+        when displaying headers it matches the theme instead of all yellow :/
+
+        [x] Field header should have foreground color of the theme 
+
+        [x] Remove borders in show index function with thin lines of '-',
+             makes it look cleaner
+
+    [x] Fix all known bugs 
+
+        [x] Searching using -O & if chosen value doesn't exist it needs
+             to quit with an exit status of 1 (catch ValueError) 
+
+        [x] Show index function needs to be upgraded so that they can
+
+             [x] Display characters 100+
+             [x] Have dynamic resizing of multiline text
+
+        [x] Have the ability to use quotations as part of password field
+             For this to work copy to clipboard function needs to have 
+             proper escape characters
+
+
