@@ -36,8 +36,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.1'
-__last_updated__ =  '02/26/2023'
+__version__      =  '2.1.1'
+__last_updated__ =  '03/01/2023'
 __license__      =  'GPLv3'
 
 

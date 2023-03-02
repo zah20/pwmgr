@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.1'
-__last_updated__ =  '02/26/2023'
+__version__      =  '2.1.1'
+__last_updated__ =  '03/01/2023'
 __license__      =  'GPLv3'
 
 
@@ -64,8 +64,8 @@ field_color_fg = ''
 """
     TODO: 
 
-    Version 2.6 (Maybe 2024, if there's no Worldwar..let's see -.-)
-    ===============================================================
+    Version 2.6.x (Maybe 2024, if there's no Worldwar..let's see -.-)
+    =================================================================
 
     [ ] ** Upgraded searchbar-copy
 
@@ -1627,11 +1627,38 @@ def copy_password(index=None):
 
         pw = enc_db_handler.get_pw_of_index(index)
 
-        if ('"' in pw):
-            pw = escape_str(pw, "'")
+        ## Almost impossible to escape single quote in bash
+        ## therefore current solution is to write the pass to a file (@home dir)
+        ## only if single quote is present & ask xclip to copy.
+        ## Obviously we wipe it off as soon as copying is done in milliseconds
 
-        cmd1 = 'echo -n \'%s\' | xclip -selection clipboard' % pw
-        os.system(cmd1)
+        ## This is an exceptional case, in general we never use this approach
+
+        cmd1 = ''
+
+        if ("'" in pw):
+
+            path_pw = '/home/%s/pw.txt' % os.getlogin()
+
+            if (write_str_to_file(pw, path_pw)):
+
+                cmd1 = 'xclip -i \'%s\' -selection clipboard' % path_pw
+                os.system(cmd1)
+                
+                try:
+                    os.remove(path_pw)
+                except FileNotFoundError:
+                    pass
+
+            else:
+                gui_msg('\n\t\t   Unable to copy password to clipboard' + \
+                        "\n\nPlease update your password so that it doesn't use single quotes")
+
+                sys.exit(1)
+        else:
+
+            cmd1 = 'echo -n \'%s\' | xclip -selection clipboard' % pw
+            os.system(cmd1)
 
         clear_clipboard()
 
@@ -2018,6 +2045,22 @@ def write_config(config={}, filename=''):
             fw.writelines(s)
             fw.writelines('\n')
             
+    return True
+
+
+def write_str_to_file(s='', fn=''):
+
+    if (len(s) == 0 or fn == ''):
+        return False
+
+    try:
+
+        with open(fn, 'w') as fh:
+            fh.write(s)
+
+    except (IOError, BaseException) as e:
+        return False
+
     return True
 
 
