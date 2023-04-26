@@ -4,8 +4,9 @@ from getch import getch
 from getpass import getpass
 from time import time, sleep
 from database_pwmgr import Record, ManageRecord, DatabaseEmptyException, DatabaseFileNotFoundException, \
-        PWDecryptionFailedException, SaltNotGeneratedException, UnsupportedFileFormatException, \
         IncorrectKeyException, IncorrectPasswordException, IntegrityCheckFailedException, \
+        PWDecryptionFailedException, UnsupportedFileFormatException, SaltNotGeneratedException, \
+        AllocateSecureMemory, SecureClipboardCopyFailedException, MemoryAllocationFailedException, \
         InvalidParameterException, KeyFileInvalidException, NoKeyFoundException
 from random import seed, randint
 import sys, os, subprocess
@@ -38,8 +39,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.1.1'
-__last_updated__ =  '03/01/2023'
+__version__      =  '2.3.0'
+__last_updated__ =  '04/26/2023'
 __license__      =  'GPLv3'
 
 
@@ -64,100 +65,112 @@ field_color_fg = ''
 """
     TODO: 
 
-    Version 2.6.x (Maybe 2024, if there's no Worldwar..let's see -.-)
-    =================================================================
+    Version 2.4 (Dec 2023, lets see)
+    ================================
 
-    [ ] ** Upgraded searchbar-copy
+     [ ] Secure memory wipe upgrade needs to account for the following attribute / processes:
 
-        [ ] Set an additional attribute that tracks which is the primary
-            field for a website
+         [ ] Wipe off master key used for the encryption system
+
+         [ ] Auditing function 
+
+     [ ] Upgraded audit fn
+
+            [ ] Create an attribute that tracks how many times 
+                a record has been used
+
+                [ ] Prioritize more frequently sites to be displayed
+                    first when using audit function 
+
+            [ ] Audit function will store all information for future
+                use instead of having to manually calculate it everytime
+
+                [ ] Everytime passwords are updated it'll silently recalculate
+                     the new metrics for the record in the background.
+
+     [ ] Password generation function UI upgrade 
+
+         [ ] Fade in / fade out effect on password generator buttons
+               when they are pressed customized for themes
+
+         [ ] Blink / Highlight of generated password 
+
+     [ ] When master password is being chosen, show the password
+          strength of the chosen password. Do not allow weak passwords
+          to be set. 
+
+    Version 2.6 (TBD, if I'm still alive and not under constant threat of zombie attack -.-)
+    ========================================================================================
+
+     [ ] Switch to pycrypto encryption library
+
+     [ ] Replace PBKDF2 with Scrypt function
+
+     [ ] Proper alignment of headers with data field for show summary
+         function when screen size is zoomed in
+
+     [ ] Upgraded searchbar-copy
+
+         [ ] Set an additional attribute that tracks which is the primary
+             field for a website
+         
+         [ ] Set primary attribute for a record when adding it or 
+             option to change it by using edit command
+
+         [ ] When you select a record it copies username/email for the
+             site depending on primary field that was set. 
+             The software wait a specified interval that can be 
+             configured (default 3s), after which it copies the 
+             password for that record (makes a background sound to
+             let you know that password has been copied)
+
+         [ ] Sound effects indicating username has been selected
+
+         [ ] Sound effects indicating password has been selected
+
+     [ ] Upgraded searchbar-show
+
+         [ ] When screen is zoomed in or > original size, 
+                the color scheme becomes black & white (x-ray effect)
         
-        [ ] Set primary attribute for a record when adding it or 
-            option to change it by using edit command
+         [ ] In x-ray mode (zoomed in) the audit metrics for a record
+             are applied to the password & last mod field with 
+             respective colors
+         
+         [ ] Sound effect when a record is selected in search bar
 
-        [ ] When you select a record it copies username/email for the
-            site depending on primary field that was set. 
-            The software wait a specified interval that can be 
-            configured (default 3s), after which it copies the 
-            password for that record (makes a background sound to
-            let you know that password has been copied)
+         [ ] Sound effect when a screen goes into x-ray mode
 
-        [ ] Sound effects indicating username has been selected
+         [ ] Sound effect when a screen goes out of x-ray mode
 
-        [ ] Sound effects indicating password has been selected
+     [ ] Option to generate hybrid, human memorable passwords based 
+         on a combination of dictionary & randomness
 
-    [ ] Switch to pycrypto encryption library
-
-    [ ] Replace PBKDF2 with Scrypt function
-
-    [ ] Upgraded searchbar-show
-
-        [ ] When screen is zoomed in or >= 50% screen size, 
-               the color scheme becomes black & white (x-ray effect)
-       
-        [ ] In x-ray mode (zoomed in) the audit metrics for a record
-            are applied to the password & last mod field with 
-            respective colors
-        
-        [ ] Sound effect when a record is selected in search bar
-
-        [ ] Sound effect when a screen goes into x-ray mode
-
-        [ ] Sound effect when a screen goes out of x-ray mode
-
-    [ ] Password generation function UI upgrade 
-
-        [ ] Fade in / fade out effect on password generator buttons
-              when they are pressed customized for themes
-
-        [ ] Blink / Highlight of generated password 
-
-    [ ] Proper alignment of headers with data field for show summary
-        function when screen size is zoomed in. We use ratio which
-        is not always that accurate
-
-    [ ] Option to generate hybrid, human memorable passwords based 
-        on a combination of dictionary & randomness
-
-    [ ] When master password is being chosen, show the password
-           strength of the chosen password. Do not allow weak passwords
-           to be set. Provide option to retry with another password or suggest 
-           a master password (using memorable password)
+         [ ] Provide option to set a master password (using memorable password)
     
-    [ ] Upgrade search bar so that it shows most frequently used
-        sites first
 
-           [ ] Create an attribute that tracks how many times 
-               a record has been used
+     [ ] Upgraded existing pw audit metrics &
 
-    [ ] Upgraded existing pw audit metrics &
+         Tests whether any of your passwords
+           are found in leaked password databases
+           online as part of audit function (additional metric)
 
-        Tests whether any of your passwords
-          are found in leaked password databases
-          online as part of audit function (additional metric)
+         * You can manually add more known pw databases as you like
 
-        * Audit function will store all information for future
-          use instead of having to manually calculate it everytime
+     [ ] Show usage patterns of sites for the week, month or year 
+          in the form of graphs and charts
 
-        * Everytime passwords are updated it'll silently recalculate
-          the new metrics for the record in the background.
-
-        * You can manually add more known pw databases as you like
-
-    [ ] Show usage patterns of sites for the week, month or year 
-         in the form of graphs and charts
-
-    [ ] Improve search function by implementing binary search
-    
-    [ ] Option to delete a range of fields using '-' symbol
-        along with commas supported values
-        e.g: 'pwmgr -d 1-30'
+     [ ] Improve search function by implementing binary search
+     
+     [ ] Option to delete a range of fields using '-' symbol
+         along with commas supported values
+         e.g: 'pwmgr -d 1-30'
 
 
-    Version 3.0 (TBD ??)
-    ==================================================
+    Version 3.0
+    ===========
 
-    [ ] Switch to custom crypto algorithm that replaces AES, don't ask why
+     [ ] Switch to custom crypto algorithm that replaces AES
 
 """
 
@@ -207,22 +220,22 @@ def parse_args():
 
         if (_theme == 1):
             theme = color_theme_1()
-            field_color_fg = '\x1B[1;38;5;25m'
+            field_color_fg = '\x1B[1;38;5;33m'
         elif (_theme == 2):
             theme = color_theme_2()
-            field_color_fg = '\x1B[1;38;5;30m'
+            field_color_fg = '\x1B[1;38;5;46m'
         elif (_theme == 3):
             theme = color_theme_3()
             field_color_fg = '\x1B[1;38;5;214m'
         elif (_theme == 4):
             theme = color_theme_4()
-            field_color_fg = '\x1B[1;38;5;24m'
+            field_color_fg = '\x1B[1;38;5;44m'
         elif (_theme == 5):
             theme = color_theme_5()
-            field_color_fg = '\x1B[1;38;5;130m'
+            field_color_fg = '\x1B[1;38;5;210m'
         elif (_theme == 6):
             theme = color_theme_6()
-            field_color_fg = '\x1B[1;38;5;24m'
+            field_color_fg = '\x1B[1;38;5;38m'
         else:
             theme = color_theme_1()
 
@@ -463,7 +476,7 @@ def parse_args():
                 exit_if_database_is_empty()
 
                 if (enc_db_handler.validate_index((index-1))):
-                    copy_password((index-1))
+                    secure_copy_password((index-1))
                     sys.exit(0)
                 else:
                     print(text_error("Selected index is not within range"))
@@ -928,6 +941,9 @@ def keyring_get():
     cmd1 = 'keyctl request user %s' % (app_name)
     stdout,stderr,rc = run_cmd(cmd1)
 
+    #print("stdout: %s" % stdout)
+    #print("stderr: %s" % stderr)
+
     if (stderr):
         return False
 
@@ -1211,6 +1227,7 @@ def audit_records(sort_ascending=True):
     print(color_menu_bars())
     print_block(1)
 
+
 def process_security_data(sort_ascending=True):
 
     global enc_db_handler
@@ -1379,6 +1396,7 @@ def show_summary(input_list=None):
             data = [(i+1), r.get_website(), r.get_email(), r.get_username(),  r.get_group()]
             data_summary.append(data)
     else:
+
         data_summary = []
 
         for i in range(len(input_list)):
@@ -1457,30 +1475,29 @@ def show_index(index=None, display_multiple_index=False):
     if (index == None):
         return
 
-    r = enc_db_handler.get_index(index)
+    r = enc_db_handler.get_index_with_enc_pw(index)
 
     header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
             'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
 
-    data = [r.get_website(), r.get_password(), r.get_email(), r.get_username(), \
+    data = [r.get_website(), '', r.get_email(), r.get_username(), \
             r.get_group(), r.get_phone_number(), r.get_two_factor(), \
             r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
 
-    
     if (not display_multiple_index):
         print_block(1)
         # print(color_menu_bars())
         print(plain_menu_bars())
         print_block(1)
 
-        display_row(header, data)
+        display_row_with_sec_mem(header, data, index)
 
         print_block(1)
         # print(color_menu_bars())
         print(plain_menu_bars())
         print_block(1)
     else:
-        display_row(header, data)
+        display_row_with_sec_mem(header, data, index)
 
 
 def get_record_at_index(index=None):
@@ -1497,19 +1514,19 @@ def get_record_at_index(index=None):
     if (index == None):
         return
 
-    r = enc_db_handler.get_index(index)
+    r = enc_db_handler.get_index_with_enc_pw(index)
 
     header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
             'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
 
-    data = [r.get_website(), r.get_password(), r.get_email(), r.get_username(), \
+    data = [r.get_website(), '', r.get_email(), r.get_username(), \
             r.get_group(), r.get_phone_number(), r.get_two_factor(), \
             r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
 
     return header, data
 
 
-def show_index_static(header=[], data=[], display_multiple_index=False):
+def show_index_static(header=[], data=[], index=0):
 
     """
     Display a record without touching database
@@ -1519,21 +1536,8 @@ def show_index_static(header=[], data=[], display_multiple_index=False):
     if (len(header) == 0 or len(data) == 0):
         return
 
-    if (not display_multiple_index):
-        print_block(1)
-        # print(color_menu_bars())
-        print(plain_menu_bars())
-        print_block(1)
+    display_row_static_with_sec_mem(header, data, index)
 
-        display_row(header, data)
-
-        print_block(1)
-        # print(color_menu_bars())
-        print(plain_menu_bars())
-        print_block(1)
-    else:
-        display_row(header, record_info)
-    
 
 def show_index_multiple(index_list=None):
 
@@ -1606,6 +1610,44 @@ def delete_index(index=None):
             print_block(1)
 
 
+def secure_copy_password(index=None):
+
+    """
+    Uses a secure version of the original method, differece being that it
+        erases memory after operation is complete
+
+    Copy the specified index from database to clipboard
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler, config
+
+    if (index == None):
+        return
+
+    try:
+
+        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
+        sec_mem_handler.copy_to_clipboard() # Auto wipes memory so no further action needed
+        print()
+        clear_clipboard()
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+        sys.exit(1)
+
+    except MemoryAllocationFailedException:
+        print(text_error('Secure memory function failed due to insufficient memory, using insecure method!'))
+        copy_password(index)
+
+    except SecureClipboardCopyFailedException:
+        print(text_error('Secure memory function is unavailable (libc.so.6 not found), using insecure method!'))
+        copy_password(index)
+
+
 def copy_password(index=None):
 
     """
@@ -1667,6 +1709,7 @@ def copy_password(index=None):
                 '\n\n       Database could be partially corrupted')
 
 
+
 def clear_clipboard():
 
     """
@@ -1681,12 +1724,10 @@ def clear_clipboard():
 
     global config 
 
-    print_block(1)
-
     t1 = int(config.get('clipboard_wipe_interval'))
 
     if (t1 != 0):
-        print(text_debug('clipboard will be cleared in %ss' % t1))
+        print('%s Clipboard will be cleared in %ss' % (color_symbol_debug(), t1))
 
     t2 = 0 # Ignore keyring wipe as we automatically set expiration
            # on keys when they're set
@@ -1718,6 +1759,116 @@ def clear_keyring():
         os.system(cmd)
     else:
         text_error('File wipe_pwmgr.py not found, please copy it to /usr/bin')
+
+
+def secure_edit_index(index=None):
+
+    """
+    Edit a record at the specified index & update it to database
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler, db_file_path
+
+    if (index == None):
+        return
+
+    r = enc_db_handler.get_index(index)
+
+    header = ['Website', 'Password', 'Username', 'Email', 'Group', 'Remark', \
+            'Two-factor', 'Recovery-email', 'Phone-number']
+
+    data = [r.get_website(), r.get_password(), r.get_username(), \
+            r.get_email(), r.get_group(), r.get_remark(), r.get_two_factor(), \
+            r.get_recovery_email(), r.get_phone_number()]
+
+    pw = data[1]
+
+    white_space = ' '*3
+
+    custom_refresh(print_menu_bars=False)
+    print(color_menu_informational("    Press (e) to edit | (Enter) to skip | (q) Quit without saving" + ' '*6))
+    print_block(3)
+
+    color = color_b('yellow')
+    rst = color_reset()
+
+    data_changed = False
+
+    for i in range(len(header)):
+    
+        category_name = '  %s:' % (header[i])
+        category_name = "{0:<20}".format(category_name)
+        #category_name = text_highlight(category_name)
+        
+        if (data[i] == "''"):
+            print('%s%s%s' % (color,category_name,rst))
+        else:
+            print('%s%s%s %s' % (color,category_name,rst,data[i]))
+        
+        cursor_hide()
+
+        while (True):
+            char = getch()
+        
+            if (char == 'e' or char == 'E'):
+                cursor_show()
+                if (i == 1):
+
+                    while True:
+
+                        data[i] = prompt_blank("New value:" + ' '*5)
+                        data_changed = True
+                        cursor_hide()
+
+                        if (data[1] != ''):
+                            print_block(1)
+                            break
+                        else:
+                            print(text_error('Password cannot be empty'))
+                    break
+
+                if (i == 6):
+                    data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", "")
+                    data_changed = True
+                    cursor_hide()
+                    print_block(1)
+                    break
+                else:
+                    data[i] = prompt_blank("New value:" + ' '*5)
+                    data_changed = True
+                    cursor_hide()
+                    print_block(1)
+                    break
+            elif (char == '\n'):
+                break
+            elif (char == 'q' or char == 'Q'):
+                print_block(1)
+                cursor_show()
+                sys.exit(1)
+
+    if (data_changed):
+        r.set_website(data[0])
+
+        if (pw != data[1]):
+            r.set_password(data[1], True)
+
+        r.set_username(data[2])
+        r.set_email(data[3])
+        r.set_group(data[4])
+        r.set_remark(data[5])
+        r.set_two_factor(data[6])
+        r.set_recovery_email(data[7])
+        r.set_phone_number(data[8])
+        
+        enc_db_handler.update_index(r, index)
+        enc_db_handler.write_encrypted_database(db_file_path)
+        
+    cursor_show()
+    print(color_menu_bars())
+    print_block(1)
 
 
 def edit_index(index=None):
@@ -2059,6 +2210,8 @@ def write_str_to_file(s='', fn=''):
             fh.write(s)
 
     except (IOError, BaseException) as e:
+        #print('Error occured')
+        #print(e)
         return False
 
     return True
@@ -2304,7 +2457,7 @@ def prompt_int(question="", default=0, min_value=0, max_value=30):
             return tmp_value
         
 
-def prompt_password(enforce_min_length=False, min_length=8):
+def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]):
 
     """
     Used during password generation, prompts for password twice
@@ -2324,27 +2477,42 @@ def prompt_password(enforce_min_length=False, min_length=8):
         if (value1 == ""):
             print(text_error("Field cannot be blank"))
             continue
+
+        if (len(blacklisted_chars) != 0):
+
+            found_blacklist_char = False
+
+            for char in blacklisted_chars:
+
+                if (char in value1):
+                    found_blacklist_char = True
+                    break
+
+            if (found_blacklist_char):
+                print(text_error("The following characters are not permitted (%s)" % convert_list_to_str(blacklisted_chars)))
+                continue
+
+
+        if (enforce_min_length and len(value1) < min_length):
+                print(text_error("Minimum password length: %d " % min_length))
+                continue
         else:
-            if (enforce_min_length and len(value1) < min_length):
-                    print(text_error("Minimum password length: %d " % min_length))
+
+            while True:    
+
+                print_block(1)
+
+                value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
+                value2 = value2.strip()
+            
+                if (value2 == ""):
+                    print(text_error(" Field cannot be blank"))
                     continue
-            else:
-
-                while True:    
-
-                    print_block(1)
-
-                    value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
-                    value2 = value2.strip()
-                
-                    if (value2 == ""):
-                        print(text_error(" Field cannot be blank"))
-                        continue
-                    elif (value2 == value1):
-                        return value1
-                    else:
-                        print(text_error("Password don't match, try again!"))
-                        break
+                elif (value2 == value1):
+                    return value1
+                else:
+                    print(text_error("Password don't match, try again!"))
+                    break
 
 
 def prompt_password_master(min_length=8):
@@ -3058,7 +3226,7 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
     print(text)
         
 
-def display_row(field_list=[], data_list=[], header_width=20, indent=5):
+def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
 
     global term_len_h, theme, field_color_fg
     
@@ -3067,6 +3235,25 @@ def display_row(field_list=[], data_list=[], header_width=20, indent=5):
 
     if (term_len_h < 50):
         print(text_error('Terminal size too small to display data'))
+        sys.exit(1)
+
+    try:
+
+        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+        sys.exit(1)
+
+    except MemoryAllocationFailedException:
+        gui_msg('\nSecure memory function failed due to insufficient memory!' + \
+                '\n\n       If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
+
+    except SecureClipboardCopyFailedException:
+        gui_msg('\n        Secure memory function is unavailable (libc.so.6 not found)' + \
+                '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
     max_length = 0
@@ -3143,11 +3330,184 @@ def display_row(field_list=[], data_list=[], header_width=20, indent=5):
             for k in range(len(d_list_char)):
                 text_l_obj[k] = d_list_char[k]
         
-            text = field_color_fg + indent_text + \
-                    text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
-                    color_reset()
+            if (i == 1):
+
+                text = field_color_fg + indent_text + \
+                        text_highlight(''.join(h_list)) + color_reset() 
+
+                sys.stdout.write(text)
+                sec_mem_handler.print_str()
+                print()
+
+            else:
+                
+                text = field_color_fg + indent_text + \
+                        text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
+                        color_reset()
         
-            print(text)
+                print(text)
+
+    sec_mem_handler.wipe_memory()
+
+
+def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
+
+    global term_len_h, theme, field_color_fg, enc_db_handler, sec_mem_handler
+    
+    if (len(data_list) == 0 or len(field_list) == 0 or index == None):
+        return 
+
+    if (term_len_h < 50):
+        print(text_error('Terminal size too small to display data'))
+        sys.exit(1)
+
+    try:
+
+        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+        sys.exit(1)
+
+    except MemoryAllocationFailedException:
+        gui_msg('\nSecure memory function failed due to insufficient memory!' + \
+                '\n\n       If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
+
+    except SecureClipboardCopyFailedException:
+        gui_msg('\n        Secure memory function is unavailable (libc.so.6 not found)' + \
+                '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
+
+    count = 0
+
+    while (True):
+
+        sleep(0.05)
+
+        try:
+
+            term_length_var = os.get_terminal_size()[0]
+
+            if (term_length_var == term_len_h and count != 0):
+
+                continue
+
+            else:
+
+                count += 1
+
+                term_len_h = term_length_var
+                clear_screen() 
+
+                print_block(1)
+                print(plain_menu_bars())
+                print_block(1)
+
+                max_length = 0
+
+                for i in range(len(data_list)):
+                    if (len(data_list[i]) > max_length):
+                        max_length = len(data_list[i])
+
+                indent_text = ' ' * indent
+
+                for i in range(len(data_list)):
+
+                    h_list = list(' ' * header_width)
+                    
+                    # text_list is the remaining data + space after header field
+                    text_list = []
+                    
+                    field = '%s ' % field_list[i]
+                    f_list_char = list(field)
+                    d_list_char = list(data_list[i])
+                    
+                    for j in range(len(f_list_char)):
+                        h_list[j] = f_list_char[j]
+                    
+                    text = ''
+
+                    text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
+
+                    if (len(text_l_obj) <= 0):
+                        print(text_error('Terminal size too small to display data'))
+                        sys.exit(1)
+
+                    if (len(d_list_char) > len(text_l_obj)):
+
+                        current_index = 0
+
+                        while (current_index < len(d_list_char)):
+
+                            for l in range(0, len(text_l_obj)):
+
+                                if (current_index >= len(d_list_char)):
+                                    break
+
+                                text_l_obj[l] = d_list_char[current_index]
+                                current_index += 1
+
+                            text_list.append(text_l_obj)
+                            text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
+
+                        text = field_color_fg + indent_text + \
+                                text_highlight(''.join(h_list)) + color_reset() + ''.join(text_list[0]) + \
+                                color_reset()
+
+                        print(text)
+
+                        blank_header = h_list  
+
+                        for crab_c in range(len(blank_header)):
+
+                            blank_header[crab_c] = ' '
+
+                        blank_header = ''.join(blank_header)
+
+                        for line in text_list[1:]:
+
+                            text = field_color_fg + indent_text + \
+                                    blank_header + color_reset() + ''.join(line) + \
+                                    color_reset()
+                    
+                            print(text)
+
+                    else:
+
+                        for k in range(len(d_list_char)):
+                            text_l_obj[k] = d_list_char[k]
+                    
+                        if (i == 1):
+
+                            text = field_color_fg + indent_text + \
+                                    text_highlight(''.join(h_list)) + color_reset() 
+
+                            sys.stdout.write(text)
+                            sec_mem_handler.print_str()
+                            print()
+
+                        else:
+
+                            text = field_color_fg + indent_text + \
+                                    text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
+                                    color_reset()
+                    
+                            print(text)
+
+                print_block(1)
+                print(plain_menu_bars())
+                print_block(1)
+
+        except OSError:
+            pass
+        except KeyboardInterrupt:
+            pass
+
+    sec_mem_handler.wipe_memory()
+    cursor_show()
+    sys.exit(0)
 
 
 def color_symbol_info():
@@ -3188,7 +3548,7 @@ def print_header():
     ------------------------------------------------------------------
 
 
-                            %s%s %s%s%s
+                           %s%s %s%s%s
 
 
     ------------------------------------------------------------------""" \
@@ -3202,7 +3562,7 @@ def print_help():
 
     print_header()
 
-    txt_color = '\x1B[1;38;5;249m'
+    txt_color = '\x1B[1;38;5;255m'
 
     print(
     """
@@ -3394,7 +3754,6 @@ def print_help():
 
          %sExports only 'site,password,username' fields to csv format%s
 
-
     """ % (color_b('orange'), txt_color, color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color,  color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color, \
@@ -3436,6 +3795,11 @@ def l(value=''):
     """
 
     return value.lower()
+
+
+def convert_list_to_str(l=[]):
+
+    return ','.join(l)
 
 
 def parse_comma(value=''):
@@ -3929,7 +4293,7 @@ def run_searchbar(input_list=[]):
         _color_background = '#1C51A3'
         _color_foreground = '#FFFFFF'
     elif (config.get('theme') == 2):
-        _color_background = '#107373'
+        _color_background = '#1a552b'
         _color_foreground = '#FFFFFF'
     elif (config.get('theme') == 3):
         _color_background = '#000000'
@@ -3938,10 +4302,10 @@ def run_searchbar(input_list=[]):
         _color_background = '#015072'
         _color_foreground = '#FFFFFF'
     elif (config.get('theme') == 5):
-        _color_background = '#875726'
+        _color_background = '#905e07'
         _color_foreground = '#FFFFFF'
     elif (config.get('theme') == 6):
-        _color_background = '#015072'
+        _color_background = '#094e6c' 
         _color_foreground = '#FFB737'
     else:
         # Setting to default theme 1, if no theme found
@@ -4006,35 +4370,8 @@ def search_bar_show():
 
     global term_len_h
 
-    try:
-
-        header, data = get_record_at_index(index)
-
-        show_index_static(header, data)
-
-        while (True):
-
-            sleep(0.05)
-
-            try:
-
-                term_length_var = os.get_terminal_size()[0]
-
-                if (term_length_var != term_len_h):
-                    term_len_h = term_length_var
-                    clear_screen() 
-                    show_index_static(header, data)
-                else:
-                    continue
-
-            except (OSError):
-                pass
-
-        cursor_show()
-        sys.exit(0)
-    except (KeyboardInterrupt):
-        cursor_show()
-        sys.exit(0)
+    header, data = get_record_at_index(index)
+    show_index_static(header, data, index)
 
 
 def search_bar_copy():
@@ -4056,7 +4393,7 @@ def search_bar_copy():
     if (index == None):
         sys.exit(1)
 
-    copy_password(index)
+    secure_copy_password(index)
 
 
 #===========================================================================#
@@ -5015,3 +5352,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

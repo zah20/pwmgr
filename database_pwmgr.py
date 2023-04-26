@@ -1,13 +1,14 @@
 #!/usr/bin/python3
-from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
+from math import ceil as math_ceil
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime as DateTime
 from hashlib import sha256
 from time import time
+import csv, ctypes
 import sys, os
 import base64
-import csv
 
 
 """
@@ -36,8 +37,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.1.1'
-__last_updated__ =  '03/01/2023'
+__version__      =  '2.3.0'
+__last_updated__ =  '04/26/2023'
 __license__      =  'GPLv3'
 
 
@@ -447,6 +448,7 @@ class ManageRecord():
 
         """
         Provides the record object at the specified index
+          * Less secure version, will be depreciated in future versions
 
         Args:    index (int)
         Returns: (Record)
@@ -455,6 +457,21 @@ class ManageRecord():
 
         r = self.__record_list[index]
         r.set_password(self.get_pw_of_index(index))
+
+        return r
+
+
+    def get_index_with_enc_pw(self, index):
+
+        """
+        Provides the record object at the specified index
+
+        Args:    index (int)
+        Returns: (Record)
+        
+        """
+
+        r = self.__record_list[index]
 
         return r
 
@@ -482,6 +499,32 @@ class ManageRecord():
             raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
 
         return pw
+
+
+    def get_pw_of_index_with_sec_mem(self, index, enc_key=''):
+
+        """
+        Returns an object of AllocateSecureMemory() function, 
+               which can wipe off sensitive information after operation
+        """
+        
+        pw = self.__record_list[index].get_password()
+
+        fernet_handler = ''
+
+        if (enc_key == ''):
+            fernet_handler = Fernet(self.__encryption_key_2)
+        else:
+            fernet_handler = Fernet(enc_key)
+
+        pw = bytes(pw, 'utf-8')
+
+        try:
+            sec_mem_handler = AllocateSecureMemory(fernet_handler.decrypt(pw).decode('utf-8'))
+        except InvalidToken:
+            raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
+
+        return sec_mem_handler
 
 
     def get_number_of_records(self):
@@ -514,6 +557,7 @@ class ManageRecord():
             l.append(item.get_summary())
 
         return l
+
 
 
     def add(self, item):
@@ -2502,29 +2546,162 @@ class ManageRecord():
             return 'n'
 
 #===========================================================================
-#               New Security Related Functions for PWMGR 2.0               #
+#               New Security Related Functions for PWMGR >= 2.3            #
 #===========================================================================
 
-def generate_master_key(key=''):
+class AllocateSecureMemory():
 
-    if (key == ''):
-        raise InvalidParameterException('generate_master_key(): key parameter cannot be empty')
-    elif(type(key) != str):
-        raise TypeError('generate_master_key(): Key needs to be of type str')
+    """
+    Function that calls c-api at lower level to allocate & securely wipe memory
 
-    temp_key = scrypt(bytes(key, 'utf-8'), '', 16, N=2**23, r=8, p=1)  
+        * At this time only string data types are supported
+    """
 
-    return temp_key 
+    def __init__(self, value=''):
+
+        if (type(value) != str):
+            msg = 'AllocateSecureMemory(): Only str data types are currently supported' 
+            raise TypeError(msg)
+
+        self.__prealloc_percent = 1.3
+        self.__data_size_physical = 0
+        self.__data_size_virtual  = 0
+
+        if (len(value) == 0):
+            self.__data_size_physical = 10
+            self.__data_size_virtual  = 0
+        elif (len(value) <= 7):
+            self.__data_size_physical = 10
+            self.__data_size_virtual  = len(value)
+        else:
+            self.__data_size_physical = math_ceil(len(value) * self.__prealloc_percent)
+            self.__data_size_virtual  = len(value)
+
+        ## Memory allocation
+        self.__data = (ctypes.c_char * self.__data_size_physical)()
+
+        ## Copying strings
+        for i in range(self.__data_size_virtual):
+            self.__data[i] = bytes(value[i], 'utf-8')
 
 
-def verify_key(pw_hash='', key=''):
+    def get_virtual_size(self):
+        return self.__data_size_virtual
 
-    if (key == '' or pw_hash == ''):
-        raise InvalidParameterException()
 
-    global kdf_handler
+    def get_physical_size(self):
+        return self.__data_size_physical
 
-    kdf_handler.verify(pw_hash, key)
+
+    def print_str(self):
+
+        for i in range(self.__data_size_virtual):
+            sys.stdout.write('%s' % self.__data[i].decode())
+            sys.stdout.flush()
+
+
+    def add_str_start(self, value=""):
+        
+        free_space = self.__data_size_physical - self.__data_size_virtual
+
+        if (free_space < len(value)):
+            new_physical_size = math_ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
+            new_virtual_size = len(value) + self.__data_size_virtual
+            new_memory =  (ctypes.c_char * new_physical_size)() 
+
+            current_index = 0
+
+            for i in range(0, len(value)):
+                new_memory[i] = bytes(value[i], 'utf-8')
+                current_index += 1
+
+            for i in range(0, self.__data_size_virtual):
+                new_memory[current_index] = self.__data[i]
+                current_index += 1
+
+            self.wipe_memory()
+
+            self.__data = new_memory
+            self.__data_size_virtual = new_virtual_size
+            self.__data_size_physical = new_physical_size
+
+        else:
+
+            # raise Exception("add_str_start(): Functionality yet to be implemented")
+            
+            data_index = self.__data_size_virtual - 1
+            end_index = self.__data_size_virtual + len(value) - 1
+
+            while (data_index >= 0):
+
+                self.__data[end_index] = self.__data[data_index]
+                end_index -= 1
+                data_index -= 1
+
+            for i in range(len(value)):
+                self.__data[i] = bytes(value[i], 'utf-8')
+
+            self.__data_size_virtual = self.__data_size_virtual + len(value)
+
+
+    def add_str_end(self, value=""):
+
+        free_space = self.__data_size_physical - self.__data_size_virtual
+
+        if (free_space >= len(value)):
+
+            start_index = self.__data_size_virtual
+
+            for i in range(0, len(value)):
+                self.__data[start_index+i] = bytes(value[i], 'utf-8')
+
+            self.__data_size_virtual = start_index + len(value)
+
+        else:
+
+            new_physical_size = math_ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
+            new_virtual_size = len(value) + self.__data_size_virtual
+            new_memory =  (ctypes.c_char * new_physical_size)() 
+
+            current_index = 0
+
+            for i in range(0, self.__data_size_virtual):
+                new_memory[current_index] = self.__data[i]
+                current_index += 1
+
+            for i in range(0, len(value)):
+                new_memory[current_index] = bytes(value[i], 'utf-8')
+                current_index += 1
+
+            self.wipe_memory()
+
+            self.__data = new_memory
+            self.__data_size_virtual = new_virtual_size
+            self.__data_size_physical = new_physical_size
+
+
+    def wipe_memory(self):
+
+        for i in range(self.__data_size_virtual):
+            self.__data[i] = bytes('\x00', 'utf-8')
+
+
+    def copy_to_clipboard(self):
+
+        try:
+            c_lib = ctypes.CDLL('/lib/libc.so.6')
+
+            self.add_str_start("echo '")
+            self.add_str_end("' | /usr/bin/xclip -selection clipboard")
+            shell_cmd = c_lib.system
+            shell_cmd(self.__data)
+            self.wipe_memory()
+
+        except OSError:
+            raise SecureClipboardCopyFailedException()
+        except Exception:
+            msg =  'Unknown error occured, while using secure clipboard copy function'
+            raise SecureClipboardCopyFailedException(msg)
 
 
 #===========================================================================
@@ -2575,3 +2752,10 @@ class UnsupportedFileFormatException(Exception):
     def __init__(self, msg="Unsupported file format detected"):
         super(UnsupportedFileFormatException, self).__init__(msg)
 
+class MemoryAllocationFailedException(Exception):
+    def __init__(self, msg='Unable to acquire sufficient memory'):
+        super(MemoryAllocationFailedException, self).__init__(msg)
+
+class SecureClipboardCopyFailedException(Exception):
+    def __init__(self, msg='Unable to copy data using secure method'):
+        super(SecureClipboardCopyFailedException, self).__init__(msg)

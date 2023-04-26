@@ -1,4 +1,27 @@
 
+    Version 2.3.0 (04/26/2023)
+    ==========================
+    
+    [x] Secure memory wipe upgrade
+
+         * When copying password to clipboard or displaying a record, that was the only 
+            scenario where we decrypted password in memory. It was not possible to 
+            overwrite memory section in python as it doesn't allow direct memory access. 
+
+             Now we have designed a custom class which interfaces with c at a lower level allowing us to 
+             securely wipe off memory, therefore reducing potential attack surface. This upgrade ensures 
+             that no passwords are leaked through memory by any means when the following functions are called:
+
+                  [x] Copying password to clipboard (-c, -C)
+
+                  [x] Displaying passwords for one more records (-o, -O)
+
+    [x] Theme upgrades
+
+          * Now every theme has a bolder color for the show function (-o, -O),
+             this improves the overall contrast, therefore increasing readability
+
+
     Version 2.1.1 (03/01/2023)
     ==========================
 
