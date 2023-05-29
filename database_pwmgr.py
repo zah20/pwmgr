@@ -5,7 +5,6 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime as DateTime
 from hashlib import sha256
-from time import time
 import csv, ctypes
 import sys, os
 import base64
@@ -37,8 +36,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.3.0'
-__last_updated__ =  '04/26/2023'
+__version__      =  '2.4.0'
+__last_updated__ =  '05/29/2023'
 __license__      =  'GPLv3'
 
 
@@ -270,11 +269,10 @@ class Record():
         return self.__remark
 
     def get_two_factor(self):
-        if (self.__two_factor == ''):
-            return 'Not enabled'
-        elif (self.__two_factor == '1'):
+
+        if (self.__two_factor == '1'):
             return 'Enabled'
-        elif (self.__two_factor == '0'):
+        else:  # self.__two_factor == '0'
             return 'Disabled'
 
     def get_recovery_email(self):
@@ -464,7 +462,7 @@ class ManageRecord():
     def get_index_with_enc_pw(self, index):
 
         """
-        Provides the record object at the specified index
+        Provides the record object at the specified index with enc pw
 
         Args:    index (int)
         Returns: (Record)
@@ -633,7 +631,6 @@ class ManageRecord():
 
         if (custom_list == None): # Do in place sorting for record in memory,
                                   # only if no other list is provided as argument
-
             if (len(self.__record_list) == 0):
                 return
 
@@ -654,7 +651,9 @@ class ManageRecord():
                     break
 
             return
+
         else:
+
             while (True):
                 changes = False
 
@@ -810,6 +809,28 @@ class ManageRecord():
 
         self.sort()
                 
+
+    def update_index_with_sec_mem(self, record_obj, index, sec_mem_handler):
+
+        """
+        Update record object at the specified index
+        
+        Args:    1) An object (Record)
+                 2) Index at which the record object will be placed (int)
+                 3) Sec mem handler instance which can be used to obtain
+                      password for the record
+        
+        Returns: N/A
+        """
+
+        _record = record_obj
+        _pw = self.__encrypt_pw(sec_mem_handler.get_str())
+        _record.set_password(_pw)
+
+        self.__record_list[index] = _record
+
+        self.sort()
+
 
     def search_website(self, website='', partial_match=True, called_by_search_all=False):
 
@@ -1025,7 +1046,6 @@ class ManageRecord():
 
 
     def convert_csvlist_to_record(self, csv_list=[], used_by_load_database=False):
-            
         
         """
         Converts all entries in csv formatted list
@@ -1500,48 +1520,9 @@ class ManageRecord():
         else:
             fernet_handler = Fernet(enc_key)
 
-        _pw = bytes(pw, 'utf-8')
-        _pw = fernet_handler.encrypt(_pw).decode('utf-8')
+        _pw = fernet_handler.encrypt(bytes(pw, 'utf-8')).decode()
 
         return _pw
-
-
-    def __pre_encrypt_records(self):
-
-        """
-        This function ensures that pw field of records are always kept in an
-        encrypted state even when database is loaded in memory. This is done
-        to minimise risk of dataleak through memory related attacks.
-
-        * To get the decrypted form of pw for each record, the interface
-          get_pw_record() needs to be called with the appropriate index
-
-        Args:      N/A
-        
-        Returns:   N/A
-
-        Exception: N/A
-        """
-
-        if (self.__encryption_key_1 == ''):
-            raise NoKeyFoundException('__pre_encrypt_records(): ' + \
-                    'Key needs to be generated first (encryption_key_1 ' + \
-                    'not found)')
-        elif (len(self.__record_list) == 0):
-            return
-
-        if (self.__encryption_key_2 == ''):
-            self.generate_new_key_2()
-
-        fernet_handler = Fernet(self.__encryption_key_2)
-
-        for i in range(0, len(self.__record_list)):
-
-            r = self.__record_list[i]
-            pw = bytes(r.get_password(), 'utf-8')
-            pw = fernet_handler.encrypt(pw).decode('utf-8')
-            r.set_password(pw)
-            self.__record_list[i] = r
 
 
     def generate_new_key_2(self, key='', update_enc_key=True):
@@ -1623,9 +1604,7 @@ class ManageRecord():
         Returns:    Boolean value indicating whether the operation succeeded or not.
 
         Exceptions: 1) NoKeyFoundException() if a new key hasn't been generated
-                    2) SaltNotGeneratedException() if by mistake one of the salt
-                       (used for pre-encryption of password field) was not generated
-                    3) IOError(): If an error occured while reading/writing file
+                    2) IOError(): If an error occured while reading/writing file
 
         """
 
@@ -1731,7 +1710,7 @@ class ManageRecord():
         if (password == ''):
             raise InvalidParameterException("load_database(): key parameter cannot be empty")
 
-        if (os.path.isfile(filename) == False): 
+        if (not os.path.isfile(filename)): 
             raise DatabaseFileNotFoundException("load_database(): File: %s does't exist" % filename)
 
         file_type = ''
@@ -1978,7 +1957,9 @@ class ManageRecord():
                 try:
                     self.get_pw_of_index(0)
                 except (IncorrectPasswordException):
-                    raise PWDecryptionFailedException()
+                    msg = 'load_database_key(): Unable to decrypt encrypted password for a record' + \
+                            ' due to corrupted data' 
+                    raise PWDecryptionFailedException(msg)
 
             ## Debug
             #st5 = time()
@@ -2414,7 +2395,6 @@ class ManageRecord():
     
         """
     
-        rating = ''
     
         pw_len = len(pw)
     
@@ -2477,8 +2457,8 @@ class ManageRecord():
 
         if (count_n != 0):
             count_total += 1
-    
-    
+
+
         return count_total
     
     
@@ -2496,18 +2476,18 @@ class ManageRecord():
                  True if found
                  False if not found
         """
-    
+
         if (len(pw) <= 1):
             return False
-    
+
         _pw = list(pw)
-    
+
         chr_p = self.get_chr_class(_pw[0])
-    
+
         for i in range(1, len(pw)):
-    
+
             c = self.get_chr_class(pw[i]) 
-    
+
             if (c == 'l' and chr_p == 'l'):
                 return True
             elif (c == 's' and chr_p == 's'):
@@ -2549,6 +2529,7 @@ class ManageRecord():
 #               New Security Related Functions for PWMGR >= 2.3            #
 #===========================================================================
 
+
 class AllocateSecureMemory():
 
     """
@@ -2578,12 +2559,14 @@ class AllocateSecureMemory():
             self.__data_size_virtual  = len(value)
 
         ## Memory allocation
-        self.__data = (ctypes.c_char * self.__data_size_physical)()
+        try:
+            self.__data = (ctypes.c_char * self.__data_size_physical)()
+        except Exception:
+            raise MemoryAllocationFailedException('AllocateSecureMemory(): Insufficient memory')
 
         ## Copying strings
         for i in range(self.__data_size_virtual):
             self.__data[i] = bytes(value[i], 'utf-8')
-
 
     def get_virtual_size(self):
         return self.__data_size_virtual
@@ -2593,11 +2576,76 @@ class AllocateSecureMemory():
         return self.__data_size_physical
 
 
+    def get_str(self):
+
+        """
+        Use this function only if you're directly providing it as input to
+        encryption / decryption functions, otherwise data may not get wiped
+        """
+        return self.__data.value.decode()
+
+
     def print_str(self):
 
         for i in range(self.__data_size_virtual):
             sys.stdout.write('%s' % self.__data[i].decode())
             sys.stdout.flush()
+
+
+    def clear_str(self):
+
+        self.wipe_memory()
+
+
+    def is_empty(self):
+
+        if (self.__data_size_virtual == 0):
+            return True
+        else:
+            return False
+
+
+    def lstrip(self):
+
+        """
+        Removes white space at the beginning of a str
+        """
+
+        start_index = 0
+
+        for i in range(self.__data_size_virtual):
+
+            if (self.__data[i].decode() == ' '):
+                start_index += 1
+            else:
+                break
+
+        current_index = 0
+
+        for i in range(start_index, self.__data_size_virtual):
+            self.__data[current_index] = self.__data[i]
+            current_index += 1
+
+        for i in range(current_index, self.__data_size_virtual):
+            self.__data[i] = bytes('\x00', 'utf-8')
+
+        self.__data_size_virtual = self.__data_size_virtual - start_index
+
+
+    def has_space(self):
+
+        """
+        This fn is used by the frontend to check if password str has space in it
+        """
+
+        result = False
+
+        for i in range(self.__data_size_virtual):
+
+            if (self.__data[i].decode() == ' '):
+                return True
+
+        return result
 
 
     def add_str_start(self, value=""):
@@ -2607,7 +2655,11 @@ class AllocateSecureMemory():
         if (free_space < len(value)):
             new_physical_size = math_ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
             new_virtual_size = len(value) + self.__data_size_virtual
-            new_memory =  (ctypes.c_char * new_physical_size)() 
+
+            try:
+                new_memory =  (ctypes.c_char * new_physical_size)() 
+            except Exception:
+                raise MemoryAllocationFailedException('AllocateSecureMemory(): Insufficient memory')
 
             current_index = 0
 
@@ -2661,7 +2713,11 @@ class AllocateSecureMemory():
 
             new_physical_size = math_ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
             new_virtual_size = len(value) + self.__data_size_virtual
-            new_memory =  (ctypes.c_char * new_physical_size)() 
+
+            try:
+                new_memory =  (ctypes.c_char * new_physical_size)() 
+            except Exception:
+                raise MemoryAllocationFailedException('AllocateSecureMemory(): Insufficient memory')
 
             current_index = 0
 
@@ -2684,6 +2740,8 @@ class AllocateSecureMemory():
 
         for i in range(self.__data_size_virtual):
             self.__data[i] = bytes('\x00', 'utf-8')
+
+        self.__data_size_virtual = 0
 
 
     def copy_to_clipboard(self):
@@ -2743,10 +2801,6 @@ class NoKeyFoundException(Exception):
 class PWDecryptionFailedException(Exception):
     def __init__(self, msg="Decryption of password stored in memory failed due to incorrect key"):
         super(PWDecryptionFailedException, self).__init__(msg)
-
-class SaltNotGeneratedException(Exception):
-    def __init__(self, msg="Salt needs to be generated first"):
-        super(SaltNotGeneratedException, self).__init__(msg)
 
 class UnsupportedFileFormatException(Exception):
     def __init__(self, msg="Unsupported file format detected"):

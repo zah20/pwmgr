@@ -1,20 +1,19 @@
 #!/usr/bin/python3
 
-from getch import getch
+import csv, wx, base64
+import os, subprocess, sys
 from getpass import getpass
-from time import time, sleep
-from database_pwmgr import Record, ManageRecord, DatabaseEmptyException, DatabaseFileNotFoundException, \
+from database_pwmgr import Record, ManageRecord, \
         IncorrectKeyException, IncorrectPasswordException, IntegrityCheckFailedException, \
-        PWDecryptionFailedException, UnsupportedFileFormatException, SaltNotGeneratedException, \
-        AllocateSecureMemory, SecureClipboardCopyFailedException, MemoryAllocationFailedException, \
-        InvalidParameterException, KeyFileInvalidException, NoKeyFoundException
+        AllocateSecureMemory, UnsupportedFileFormatException, SecureClipboardCopyFailedException, \
+        MemoryAllocationFailedException, KeyFileInvalidException
 from random import seed, randint
-import sys, os, subprocess
-import csv, wx, base64 
+from getch import getch
+from time import sleep
 
 
 """
-Password Manager 
+Password Manager
 
 Copyright © 2023 Zubair Hossain
 
@@ -39,15 +38,14 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.3.0'
-__last_updated__ =  '04/26/2023'
+__version__      =  '2.4.0'
+__last_updated__ =  '05/29/2023'
 __license__      =  'GPLv3'
 
 
 global enc_db_handler, app_name, file_name, pw_master, \
         password_in_keyring, term_len_h, db_file_path, \
         theme, field_color_fg, config, config_file
-
 # All configs / database is stored under '~/.config/pwmgr/'
 password_in_keyring=False
 enc_db_handler = None
@@ -63,24 +61,24 @@ field_color_fg = ''
 
 
 """
-    TODO: 
+    TODO:
 
-    Version 2.4 (Dec 2023, lets see)
-    ================================
+    Version 3.0 (TBD)
+    =================
 
      [ ] Secure memory wipe upgrade needs to account for the following attribute / processes:
 
          [ ] Wipe off master key used for the encryption system
 
-         [ ] Auditing function 
+         [ ] Auditing function
 
      [ ] Upgraded audit fn
 
-            [ ] Create an attribute that tracks how many times 
+            [ ] Create an attribute that tracks how many times
                 a record has been used
 
                 [ ] Prioritize more frequently sites to be displayed
-                    first when using audit function 
+                    first when using audit function
 
             [ ] Audit function will store all information for future
                 use instead of having to manually calculate it everytime
@@ -88,39 +86,37 @@ field_color_fg = ''
                 [ ] Everytime passwords are updated it'll silently recalculate
                      the new metrics for the record in the background.
 
-     [ ] Password generation function UI upgrade 
+     [ ] Password generation function UI upgrade
 
          [ ] Fade in / fade out effect on password generator buttons
                when they are pressed customized for themes
 
-         [ ] Blink / Highlight of generated password 
+         [ ] Blink / Highlight of generated password
 
      [ ] When master password is being chosen, show the password
           strength of the chosen password. Do not allow weak passwords
-          to be set. 
-
-    Version 2.6 (TBD, if I'm still alive and not under constant threat of zombie attack -.-)
-    ========================================================================================
+          to be set.
 
      [ ] Switch to pycrypto encryption library
 
      [ ] Replace PBKDF2 with Scrypt function
 
-     [ ] Proper alignment of headers with data field for show summary
-         function when screen size is zoomed in
+
+    Version 3.6 (TBD)
+    =================
 
      [ ] Upgraded searchbar-copy
 
          [ ] Set an additional attribute that tracks which is the primary
              field for a website
-         
-         [ ] Set primary attribute for a record when adding it or 
+
+         [ ] Set primary attribute for a record when adding it or
              option to change it by using edit command
 
          [ ] When you select a record it copies username/email for the
-             site depending on primary field that was set. 
-             The software wait a specified interval that can be 
-             configured (default 3s), after which it copies the 
+             site depending on primary field that was set.
+             The software wait a specified interval that can be
+             configured (default 3s), after which it copies the
              password for that record (makes a background sound to
              let you know that password has been copied)
 
@@ -130,24 +126,23 @@ field_color_fg = ''
 
      [ ] Upgraded searchbar-show
 
-         [ ] When screen is zoomed in or > original size, 
+         [ ] When screen is zoomed in or > original size,
                 the color scheme becomes black & white (x-ray effect)
-        
+
          [ ] In x-ray mode (zoomed in) the audit metrics for a record
-             are applied to the password & last mod field with 
+             are applied to the password & last mod field with
              respective colors
-         
+
          [ ] Sound effect when a record is selected in search bar
 
          [ ] Sound effect when a screen goes into x-ray mode
 
          [ ] Sound effect when a screen goes out of x-ray mode
 
-     [ ] Option to generate hybrid, human memorable passwords based 
+     [ ] Option to generate hybrid, human memorable passwords based
          on a combination of dictionary & randomness
 
          [ ] Provide option to set a master password (using memorable password)
-    
 
      [ ] Upgraded existing pw audit metrics &
 
@@ -157,20 +152,16 @@ field_color_fg = ''
 
          * You can manually add more known pw databases as you like
 
-     [ ] Show usage patterns of sites for the week, month or year 
+     [ ] Show usage patterns of sites for the week, month or year
           in the form of graphs and charts
 
      [ ] Improve search function by implementing binary search
-     
+
      [ ] Option to delete a range of fields using '-' symbol
          along with commas supported values
          e.g: 'pwmgr -d 1-30'
 
-
-    Version 3.0
-    ===========
-
-     [ ] Switch to custom crypto algorithm that replaces AES
+     [ ] Switch to cloudchat crypto mix ^^ (more details will be provided later)
 
 """
 
@@ -202,13 +193,13 @@ def parse_args():
         except (OSError):
             term_len_h = 100
 
-        if (check_if_prog_exists(['keyctl'])[0] == False): 
+        if (check_if_prog_exists(['keyctl'])[0] == False):
             print(text_error('The program keyctl was not found. It is required to store & manage keys on a system running systemd'))
             sys.exit(1)
-        elif (check_if_prog_exists(['xclip'])[0] == False): 
+        elif (check_if_prog_exists(['xclip'])[0] == False):
             print(text_error('The program xclip was not found. It is required to use clipboard functionality'))
             sys.exit(1)
-        elif (check_if_prog_exists(['dmenu'])[0] == False): 
+        elif (check_if_prog_exists(['dmenu'])[0] == False):
             print(text_error('The program dmenu was not found. It is required to use the search bar functionality'))
             sys.exit(1)
 
@@ -255,7 +246,7 @@ def parse_args():
 
             elif (sys.argv[1] == 'copy-searchbar' or sys.argv[1] == '--copy-searchbar' or sys.argv[1] == '-C'):
 
-                if (check_if_prog_exists(['dmenu', 'xclip'])[0] == False): 
+                if (check_if_prog_exists(['dmenu', 'xclip'])[0] == False):
                     print(text_error('Dmenu package & xclip needs to be installed.'))
                     sys.exit(1)
                 
@@ -266,16 +257,16 @@ def parse_args():
 
             elif (sys.argv[1] == 'show-searchbar' or sys.argv[1] == '--show-searchbar' or sys.argv[1] == '-O'):
 
-                if (check_if_prog_exists(['dmenu'])[0] == False): 
+                if (check_if_prog_exists(['dmenu'])[0] == False):
                     print(text_error('Dmenu package was not found. Please install it & try again!'))
                     sys.exit(1)
-                
+
                 check_database()
                 exit_if_database_is_empty()
                 search_bar_show()
 
             elif (sys.argv[1] == 'show-recent' or sys.argv[1] == '--show-recent' or sys.argv[1] == '-sr'):
-                
+
                 check_database()
                 exit_if_database_is_empty()
                 show_last_modified()
@@ -291,7 +282,7 @@ def parse_args():
                 if (check_if_prog_exists(['dd'])[0] == False): 
                     print(text_error('The program dd was not found. Please install it & try again!'))
                     sys.exit(1)
-                    
+
                 generate_keyfile()
                 print_block(1)
                 sys.exit(0)
@@ -442,7 +433,7 @@ def parse_args():
                 exit_if_database_is_empty()
 
                 if (enc_db_handler.validate_index((index-1))):
-                    edit_index((index-1))
+                    secure_edit_index((index-1))
                     sys.exit(0)
                 else:
                     print(text_error("Selected index is not within range"))
@@ -552,9 +543,9 @@ def parse_args():
 
                 if (sys.argv[2].strip() == ''):
                     list_keyfile()
-                elif (l(sys.argv[2].strip()) == 'brief'):
+                elif (sys.argv[2].strip() == 'brief'):
                     list_keyfile()
-                elif (l(sys.argv[2].strip()) == 'full'):
+                elif (sys.argv[2].strip() == 'full'):
                     list_keyfile(False)
                 else:
                     print(text_error("The selected option doesn't exist"))
@@ -572,7 +563,7 @@ def parse_args():
                 check_database()
                 exit_if_database_is_empty()
 
-                if (l(sys.argv[2]) == 'sort-dsc'):
+                if (sys.argv[2] == 'sort-dsc'):
                     audit_records(False)
                 else:
                     audit_records(True)
@@ -581,9 +572,11 @@ def parse_args():
 
             elif (sys.argv[1] == 'import' or sys.argv[1] == '--import'):
 
-                if (l(sys.argv[2]) == 'pass'):
-                    check_database()
-                    import_from_pass()
+                if (sys.argv[2] == 'pass'):
+                    print(text_error("Function is no longer supported"))
+                    print(text_debug("Please import your database using " + \
+                            color_b('orange') + "--import-csv" + color_reset() + ' function'))
+                    print_block(1)
                     sys.exit(0)
                 else:
                     print(text_error("The selected option doesn't exist"))
@@ -615,15 +608,15 @@ def parse_args():
 
             elif (sys.argv[1] == 'export-csv-brief' or sys.argv[1] == '--export-csv-brief'):
 
-                    fn = sys.argv[2].strip()
+                fn = sys.argv[2].strip()
 
-                    if (fn != ''):
-                        check_database()
-                        export_to_csv(fn, brief=True)
-                        sys.exit(0)
-                    else:
-                        print(text_error("Requires a file name"))
-                        sys.exit(1)
+                if (fn != ''):
+                    check_database()
+                    export_to_csv(fn, brief=True)
+                    sys.exit(0)
+                else:
+                    print(text_error("Requires a file name"))
+                    sys.exit(1)
 
             else:
                 print(text_error("The selected option doesn't exist"))
@@ -636,7 +629,7 @@ def parse_args():
 
                 options = ['group', 'site', 'email', 'username', 'all']
 
-                if (l(sys.argv[2]) not in options):
+                if (sys.argv[2] not in options):
                     print(text_error("The selected option doesn't exist"))
                     sys.exit(1)
 
@@ -670,7 +663,7 @@ def parse_args():
                     print(text_error(msg))
                     sys.exit(1)
 
-                data = read_csv_pwmgr(input_file) 
+                data = read_csv_pwmgr(input_file)
 
                 write_csv_pwmgr(data, sys.argv[3])
 
@@ -702,7 +695,7 @@ def parse_args():
                     print(text_error(msg))
                     sys.exit(1)
 
-                data = read_csv_pwmgr(input_file) 
+                data = read_csv_pwmgr(input_file)
 
                 if (len(data) == 0):
                     print(text_error('No data found in file'))
@@ -748,9 +741,6 @@ def parse_args():
 
 
 def check_database():
-    
-    ## Debug
-    #st = time()
 
     global file_name, db_file_path, app_name, enc_db_handler, pw_master, password_in_keyring, \
             config, config_file
@@ -775,17 +765,12 @@ def check_database():
             print(text_error(msg))
             sys.exit(1)
 
-    ## Debug
-    #st2 = time()
-    #print("get_username(),ManageRecord() time taken: %.3fs" % (st2-st))
-
     if (os.path.isfile(db_file_path) == False):
         # (No database found)
 
         print_block(1)
 
         if (prompt_yes_no("No database exists. Do you want to create a new one? (Y/n): ", True)):
-            #custom_refresh()
             print_block(1)
             pw_master = prompt_password(enforce_min_length=True)
             print_block(1)
@@ -815,14 +800,10 @@ def check_database():
         # (Previous database exists)
         # We search for password in keyring, if nothing found we prompt user
         #       for master password & attempt to decrypt it
-        # 
+        #
 
         key = keyring_get()
         result = False
-
-        ## Debug
-        #st3 = time()
-        #print("keyring.get_password() time taken: %.3fs" % (st3-st2))
 
         ## * We use 2 exception handlers, cos IncorrectPasswordException & 
         ##   IncorrectKeyException() overlap with other exception handlers
@@ -839,7 +820,6 @@ def check_database():
             try:
                 if (key == False):
                     password_in_keyring = False
-                    #pw_master = prompt_password_once() # Cmdline password prompt, fn has been removed
                     pw_master = prompt_password_gui() # GUI password prompt
 
                     if (pw_master == False):
@@ -849,35 +829,16 @@ def check_database():
                 else:
                     result = enc_db_handler.load_database_key(db_file_path, bytes(key, 'utf-8'))
 
-                ## Debug
-                #st4 = time()
-                #print("load_database() time taken: %.3fs" % (st4-st3))
-
             except (UnsupportedFileFormatException):
-                #print(text_error('Unsupported file format detected'))
-                #print(text_highlight("1) Run '--export csv out.csv' on older version of pwmgr <= 1.3"))
-                #print(text_highlight("2) Backup & remove ~/.config/pwmgr/data.enc"))
-                #print(text_highlight("3) Run '--import out.csv' on latest version of pwmgr >= 1.5"))
-                #print()
 
                 gui_msg("\nUnsupported file format detected!\n\n" + \
                         "1) Run '--export csv-brief data.csv' on older version of pwmgr < 2.0\n" + \
                         "2) Backup & remove ~/.config/pwmgr/data.enc\n" + \
                         "3) Run '--import data.csv' on latest version of pwmgr >= 2.0\n")
-                
+
                 sys.exit(0)
 
             except (IntegrityCheckFailedException):
-                #print(text_error('Integrity check failed, data possibly corrupted'))
-
-                #if (prompt_yes_no("Load database anyway? (y/N): ", False, False)):
-                #    if (key):
-                #        result = enc_db_handler.load_database_key(db_file_path, bytes(key,'utf-8'), override_integrity_check=True)
-                #    else:
-                #        result = enc_db_handler.load_database(db_file_path, pw_master, override_integrity_check=True)
-                #else:
-                #    print()
-                #    sys.exit(0)
 
                 r = gui_confirmation('\nHash mismatch detected. Data could have been corrupted!\n\n' + \
                         'Press OK to repair database\n')
@@ -893,9 +854,9 @@ def check_database():
                         sys.exit(0)
                 else:
                     sys.exit(0)
-                    
-                
-            if (result): # Database decryption succeeded
+
+
+            if (result):  # Database decryption succeeded
 
                 if (password_in_keyring == False):
                     if (keyring_set(enc_db_handler.get_key()) == False):
@@ -904,18 +865,13 @@ def check_database():
                         keyring_set_expiration()
 
         except (IncorrectPasswordException):
-                gui_msg('\nUnable to decrypt data due to incorrect password / keyfile\n')
-                sys.exit(1)
+            gui_msg('\nUnable to decrypt data due to incorrect password / keyfile\n')
+            sys.exit(1)
 
         except (IncorrectKeyException):
-                gui_msg("\nUnable to decrypt data as stored key is incorrect." + \
-                        "\n\nPlease use 'pwmgr --keyring reset' to remove it\n")
-                sys.exit(1)
-
-        ## Debug
-        #et = time()
-        #diff = float(et - st)
-        #print("check_database() time taken: %.3fs" % diff)
+            gui_msg("\nUnable to decrypt data as stored key is incorrect." + \
+                    "\n\nPlease use 'pwmgr --keyring reset' to remove it\n")
+            sys.exit(1)
 
 
 def exit_if_database_is_empty():
@@ -1006,10 +962,10 @@ def keyring_set_expiration():
 
     cmd1 = 'keyctl request user %s' % (app_name)
     stdout,stderr,rc = run_cmd(cmd1)
-    
+
     if (stderr):
         return False
-    
+
     key_id = stdout
 
     cmd2 = 'keyctl timeout %s %s' % (key_id, t)
@@ -1029,7 +985,7 @@ def pw_reset():
 
     Note: Needs to be called after database has been loaded in memory using
           the check_database() function
-        
+
     """
 
     global app_name, enc_db_handler, db_file_path, config
@@ -1090,7 +1046,7 @@ def add():
     Adds a record to database
     """
 
-    global enc_db_handler, db_file_path
+    global enc_db_handler, db_file_path, field_color_fg
     
     custom_refresh(3,2)
 
@@ -1152,7 +1108,7 @@ def add():
 
         if (email != ''):
             r.set_email(email)
-        
+
         if (group != ''):
             r.set_group(group)
 
@@ -1164,7 +1120,7 @@ def add():
 
         if (phone != ''):
             r.set_phone_number(phone)
-        
+
         if (two_factor != ''):
             r.set_two_factor(two_factor)
 
@@ -1180,7 +1136,7 @@ def add():
                 print(text_debug("Record has been discarded"))
                 print_block(2)
                 print(color_menu_bars())
-                cursow_show()
+                cursor_show()
                 return
         else:
             enc_db_handler.add(r)
@@ -1241,7 +1197,6 @@ def process_security_data(sort_ascending=True):
 
     color_rst = color_reset()
     color_white = color_b('white')
-    color_blue = color_b('blue')
     color_green = color_b('green')
     color_yellow = color_b('yellow')
     color_orange = color_b('orange')
@@ -1276,7 +1231,7 @@ def process_security_data(sort_ascending=True):
         (0-6)   : Critical
         """
 
-        pw_cmpx = r.get_pw_complexity() 
+        pw_cmpx = r.get_pw_complexity()
         pw_cmpx_info = ''
 
         ## Adding data & color information as a list instead of hardcoded strings
@@ -1366,16 +1321,6 @@ def process_security_data(sort_ascending=True):
     return header, data
 
 
-def show_audit(sort_ascending=True):
-
-    """
-    Show password auditing information 
-    """
-    global enc_db_handler
-
-    pass
-
-
 def show_summary(input_list=None):
 
     """
@@ -1403,17 +1348,15 @@ def show_summary(input_list=None):
             r = enc_db_handler.get_index(input_list[i])
             data = [(input_list[i]+1), r.get_website(), r.get_email(), r.get_username(), r.get_group()]
             data_summary.append(data)
-    
-    header = ['Site', 'Username', 'Email', 'Group']
 
     # This is for partitioning space & printing out header according to the
     # ratio specified by the second index
     new_header = [['Site', 4], ['   Email',4], ['      Username',2], ['       Group', 2]]
-    
+
     print_block(1)
     print(color_menu_column_header(new_header))
     print_block(1)
-    
+
     for item in data_summary:
         formatted_data = format_data_with_spacing(item)
         print(formatted_data)
@@ -1441,17 +1384,15 @@ def show_last_modified():
         index = input_list[i][1]
         data = [(index+1), r.get_website(), r.get_group(), r.get_last_modified()]
         data_summary.append(data)
-    
-    header = ['Site', 'Group', 'Last Modified']
 
     # This is for partitioning space & printing out header according to the
     # ratio specified by the second index
     new_header = [['Site', 2.8], ['  Group', 3], [' Last Modified', 2.5]]
-    
+
     print_block(1)
     print(color_menu_column_header(new_header))
     print_block(1)
-    
+
     for item in data_summary:
         formatted_data = format_data_with_spacing(item)
         print(formatted_data)
@@ -1627,6 +1568,8 @@ def secure_copy_password(index=None):
     if (index == None):
         return
 
+    sec_mem_handler = None
+
     try:
 
         sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
@@ -1717,12 +1660,12 @@ def clear_clipboard():
 
     Initially I wasn't aware that keyctl function supports expiration therefore
     used this script to clear keys from tpm, now it's not required anymore.
-    
+
     #TODO wipe_pwmgr.py code needs to be updated to remove unused functionality
 
     """
 
-    global config 
+    global config
 
     t1 = int(config.get('clipboard_wipe_interval'))
 
@@ -1770,91 +1713,154 @@ def secure_edit_index(index=None):
 
     """
 
-    global enc_db_handler, db_file_path
+    global enc_db_handler, db_file_path, field_color_fg
 
     if (index == None):
         return
 
-    r = enc_db_handler.get_index(index)
+    r = enc_db_handler.get_index_with_enc_pw(index)
 
-    header = ['Website', 'Password', 'Username', 'Email', 'Group', 'Remark', \
+    header = ['Website', 'Password', 'Username', 'Email', 'Group', 'Notes', \
             'Two-factor', 'Recovery-email', 'Phone-number']
 
-    data = [r.get_website(), r.get_password(), r.get_username(), \
+    data = [r.get_website(), '', r.get_username(), \
             r.get_email(), r.get_group(), r.get_remark(), r.get_two_factor(), \
             r.get_recovery_email(), r.get_phone_number()]
 
-    pw = data[1]
+    sec_mem_handler = None
 
-    white_space = ' '*3
+    sec_mem_handler_new = None
+
+    try:
+        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+        sys.exit(1)
+
+    except MemoryAllocationFailedException:
+        gui_msg('\nSecure memory function failed due to insufficient memory!' + \
+                '\n\n       If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
+
+    except SecureClipboardCopyFailedException:
+        gui_msg('\n        Secure memory function is unavailable (libc.so.6 not found)' + \
+                '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
 
     custom_refresh(print_menu_bars=False)
     print(color_menu_informational("    Press (e) to edit | (Enter) to skip | (q) Quit without saving" + ' '*6))
     print_block(3)
 
-    color = color_b('yellow')
+    color = field_color_fg
     rst = color_reset()
 
     data_changed = False
+    pw_changed   = False
 
     for i in range(len(header)):
-    
+
         category_name = '  %s:' % (header[i])
         category_name = "{0:<20}".format(category_name)
-        #category_name = text_highlight(category_name)
-        
-        if (data[i] == "''"):
+
+        if (i == 1):
+            text = '%s%s%s ' % (color,category_name,rst) 
+            sys.stdout.write(text)
+            sec_mem_handler.print_str()
+        elif (i == 2): ## sec_mem_handler.print_str() fn doesn't print a blank line so we add one
+
+            print_block(1)
+
+            if (data[i] == "''"):
+                print('%s%s%s' % (color,category_name,rst))
+            else:
+                print('%s%s%s %s' % (color,category_name,rst,data[i]))
+
+        elif (data[i] == "''"):
             print('%s%s%s' % (color,category_name,rst))
         else:
             print('%s%s%s %s' % (color,category_name,rst,data[i]))
-        
+
         cursor_hide()
 
-        while (True):
-            char = getch()
-        
-            if (char == 'e' or char == 'E'):
-                cursor_show()
-                if (i == 1):
+        try:
 
-                    while True:
+            while (True):
 
+                char = getch()
+
+                if (char == 'e' or char == 'E'):
+
+                    cursor_show()
+
+                    if (i == 1):
+
+                        print_block(1)
+
+                        try:
+                            sec_mem_handler_new = prompt_with_sec_mem("New value:" + ' '*5)
+                        except (OverflowError):
+                            ## If we run into error, we try to wipe off whatever
+                            ## was stored in memmory
+
+                            sec_mem_handler.wipe_memory()
+
+                            if (sec_mem_handler_new != None):
+                                sec_mem_handler_new.wipe_memory()
+
+                            sys.exit(0)
+
+                        data_changed = True
+                        pw_changed   = True
+                        cursor_hide()
+                        break
+
+                    if (i == 6):
+                        data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", "")
+                        data_changed = True
+                        cursor_hide()
+                        break
+                    else:
                         data[i] = prompt_blank("New value:" + ' '*5)
                         data_changed = True
                         cursor_hide()
+                        break
 
-                        if (data[1] != ''):
-                            print_block(1)
-                            break
-                        else:
-                            print(text_error('Password cannot be empty'))
+                elif (char == '\n'):
                     break
 
-                if (i == 6):
-                    data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", "")
-                    data_changed = True
-                    cursor_hide()
+                elif (char in ('q', 'Q')):
+
+                    try:
+                        if (sec_mem_handler != None):
+                            sec_mem_handler.wipe_memory()
+                    except OverflowError:
+                        pass
+
+                    try:
+                        if (sec_mem_handler_new != None):
+                            sec_mem_handler_new.wipe_memory()
+                    except OverflowError:
+                        pass
+
                     print_block(1)
-                    break
-                else:
-                    data[i] = prompt_blank("New value:" + ' '*5)
-                    data_changed = True
-                    cursor_hide()
-                    print_block(1)
-                    break
-            elif (char == '\n'):
-                break
-            elif (char == 'q' or char == 'Q'):
-                print_block(1)
-                cursor_show()
-                sys.exit(1)
+                    cursor_show()
+                    sys.exit(1)
+
+        except KeyboardInterrupt:
+
+            sec_mem_handler.wipe_memory()
+
+            if (sec_mem_handler_new != None):
+                sec_mem_handler_new.wipe_memory()
+
+            print_block(1)
+            cursor_show()
+            sys.exit(1)
 
     if (data_changed):
         r.set_website(data[0])
-
-        if (pw != data[1]):
-            r.set_password(data[1], True)
-
         r.set_username(data[2])
         r.set_email(data[3])
         r.set_group(data[4])
@@ -1862,124 +1868,27 @@ def secure_edit_index(index=None):
         r.set_two_factor(data[6])
         r.set_recovery_email(data[7])
         r.set_phone_number(data[8])
-        
-        enc_db_handler.update_index(r, index)
-        enc_db_handler.write_encrypted_database(db_file_path)
-        
-    cursor_show()
-    print(color_menu_bars())
-    print_block(1)
 
-
-def edit_index(index=None):
-
-    """
-    Edit a record at the specified index & update it to database
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global enc_db_handler, db_file_path
-
-    if (index == None):
-        return
-
-    r = enc_db_handler.get_index(index)
-
-    header = ['Website', 'Password', 'Username', 'Email', 'Group', 'Remark', \
-            'Two-factor', 'Recovery-email', 'Phone-number']
-
-    data = [r.get_website(), r.get_password(), r.get_username(), \
-            r.get_email(), r.get_group(), r.get_remark(), r.get_two_factor(), \
-            r.get_recovery_email(), r.get_phone_number()]
-
-    pw = data[1]
-
-    white_space = ' '*3
-
-    custom_refresh(print_menu_bars=False)
-    print(color_menu_informational("    Press (e) to edit | (Enter) to skip | (q) Quit without saving" + ' '*6))
-    print_block(3)
-
-    color = color_b('yellow')
-    rst = color_reset()
-
-    data_changed = False
-
-    for i in range(len(header)):
-    
-        category_name = '  %s:' % (header[i])
-        category_name = "{0:<20}".format(category_name)
-        #category_name = text_highlight(category_name)
-        
-        if (data[i] == "''"):
-            print('%s%s%s' % (color,category_name,rst))
+        if (pw_changed):
+            enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler_new)
         else:
-            print('%s%s%s %s' % (color,category_name,rst,data[i]))
-        
-        cursor_hide()
+            enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler)
 
-        while (True):
-            char = getch()
-        
-            if (char == 'e' or char == 'E'):
-                cursor_show()
-                if (i == 1):
-
-                    while True:
-
-                        data[i] = prompt_blank("New value:" + ' '*5)
-                        data_changed = True
-                        cursor_hide()
-
-                        if (data[1] != ''):
-                            print_block(1)
-                            break
-                        else:
-                            print(text_error('Password cannot be empty'))
-                    break
-
-                if (i == 6):
-                    data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", "")
-                    data_changed = True
-                    cursor_hide()
-                    print_block(1)
-                    break
-                else:
-                    data[i] = prompt_blank("New value:" + ' '*5)
-                    data_changed = True
-                    cursor_hide()
-                    print_block(1)
-                    break
-            elif (char == '\n'):
-                break
-            elif (char == 'q' or char == 'Q'):
-                print_block(1)
-                cursor_show()
-                sys.exit(1)
-
-    if (data_changed):
-        r.set_website(data[0])
-
-        if (pw != data[1]):
-            r.set_password(data[1], True)
-
-        r.set_username(data[2])
-        r.set_email(data[3])
-        r.set_group(data[4])
-        r.set_remark(data[5])
-        r.set_two_factor(data[6])
-        r.set_recovery_email(data[7])
-        r.set_phone_number(data[8])
-        
-        enc_db_handler.update_index(r, index)
         enc_db_handler.write_encrypted_database(db_file_path)
-        
+
+    try:
+        sec_mem_handler.wipe_memory()
+
+        if (sec_mem_handler_new != None):
+            sec_mem_handler_new.wipe_memory()
+
+    except Exception:
+        pass
+
     cursor_show()
     print(color_menu_bars())
     print_block(1)
-    
+
 
 def search(keyword=''):
 
@@ -1989,7 +1898,7 @@ def search(keyword=''):
         return
 
     result = enc_db_handler.search_all(keyword)
-    
+
     if (len(result) == 0):
         print_block(1)
         print(text_debug('Nothing found'))
@@ -2033,7 +1942,7 @@ def config_pwmgr():
 
     global config, config_file
 
-        
+
     c_dir = '/home/%s/.config/pwmgr/' % (os.getlogin())
 
     if (os.path.exists(c_dir) == False):
@@ -2065,7 +1974,7 @@ def validate_config():
 
     Return: None
 
-    Remarks: Global variable config is probed & updated as required
+    Notes: Global variable config is probed & updated as required
     """
     
     global config 
@@ -2186,16 +2095,15 @@ def write_config(config={}, filename=''):
             s = ''
 
             if (type(config[item]) == bool):
-                v = 'True' if config[item] else 'False'
                 s = '%s = %s' % (item, config[item])
             elif (type(config[item]) == int):
                 s = '%s = %d' % (item, config[item])
             else:
                 s = '%s = "%s"' % (item, config[item])
-            
+
             fw.writelines(s)
             fw.writelines('\n')
-            
+
     return True
 
 
@@ -2209,7 +2117,7 @@ def write_str_to_file(s='', fn=''):
         with open(fn, 'w') as fh:
             fh.write(s)
 
-    except (IOError, BaseException) as e:
+    except (IOError, BaseException):
         #print('Error occured')
         #print(e)
         return False
@@ -2262,11 +2170,11 @@ def set_default_font():
                 f_size = 18
             else:
                 f_size = 14
-    
+
         config.update({'searchbar_font_name':f_name})
         config.update({'searchbar_font_size':f_size})
 
-        
+
 def get_screen_resolution():
 
     cmd = "xrandr | grep '*' | awk '{print $1}'"
@@ -2341,15 +2249,15 @@ def rm_space_with_asterisk(s=''):
 
 def check_formatting(line=''):
 
-        if (line == ''):
-            return True
-        elif (line.count('=') != 1):
-            return False
-        elif (check_arg(line) == False):
-            return False
-        else:
-            return True
-        
+    if (line == ''):
+        return True
+    elif (line.count('=') != 1):
+        return False
+    elif (check_arg(line) == False):
+        return False
+    else:
+        return True
+
 
 def check_arg(line=''):
 
@@ -2374,14 +2282,14 @@ def check_arg(line=''):
         else:
             return False
     else:
-       return False
+        return False
 
 
 #===========================================================================
 #                      User input parsing functions                        #
 #===========================================================================
 
-def prompt(question=""):
+def prompt(question="", enable_color=True):
 
     color = color_b('yellow')
     rst = color_reset()
@@ -2389,12 +2297,42 @@ def prompt(question=""):
     value = ""
 
     while (value == ""):
-        value = input(color_symbol_info() + color + question + rst)
+
+        if (enable_color):
+            value = input(color_symbol_info() + ' ' + color + question + rst)
+        else:
+            value = input(color_symbol_info() + ' ' + text_highlight(question) + rst)
 
         if (value == ""):
             print(text_error("Field cannot be blank"))
 
     return value.lower()
+
+
+def prompt_with_sec_mem(question=""):
+
+    sec_mem_handler = AllocateSecureMemory()
+
+    color = color_b('yellow')
+    rst = color_reset()
+
+    while (True):
+
+        sec_mem_handler.add_str_start(input(color_symbol_info() + ' ' + color + text_highlight(question) + rst))
+
+        sec_mem_handler.lstrip()
+
+        if (sec_mem_handler.has_space()):
+            sec_mem_handler.clear_str()
+            print(text_error('Password cannot contain space'))
+
+        elif (not sec_mem_handler.is_empty()):
+            break
+        else:
+            sec_mem_handler.clear_str()
+            print(text_error('Password cannot be empty'))
+
+    return sec_mem_handler
 
 
 def prompt_blank(question="", enable_color=True):
@@ -2404,7 +2342,7 @@ def prompt_blank(question="", enable_color=True):
     if (enable_color):
         color = color_b('yellow')
         rst = color_reset()
-        value = input(color_symbol_info() + ' ' +  color + question + rst)
+        value = input(color_symbol_info() + ' ' + color + question + rst)
     else:
         value = input(color_symbol_info() + ' ' +  text_highlight(question))
 
@@ -2455,7 +2393,7 @@ def prompt_int(question="", default=0, min_value=0, max_value=30):
             print(text_error('Maximum length limit of %d characters' % min_value))
         else:
             return tmp_value
-        
+
 
 def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]):
 
@@ -2494,8 +2432,8 @@ def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]
 
 
         if (enforce_min_length and len(value1) < min_length):
-                print(text_error("Minimum password length: %d " % min_length))
-                continue
+            print(text_error("Minimum password length: %d " % min_length))
+            continue
         else:
 
             while True:    
@@ -2504,7 +2442,7 @@ def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]
 
                 value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
                 value2 = value2.strip()
-            
+
                 if (value2 == ""):
                     print(text_error(" Field cannot be blank"))
                     continue
@@ -2551,7 +2489,7 @@ def prompt_password_master(min_length=8):
                 key = enc_db_handler.generate_new_key(value1, False, False, kf)
             else:
                 key = enc_db_handler.generate_new_key(value1, False, False)
-            
+
             if (key == master_key):
                 print(text_error("New password cannot be the same as old password"))
                 continue
@@ -2561,7 +2499,7 @@ def prompt_password_master(min_length=8):
     while True:    
         value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
         value2 = value2.strip()
-    
+
         if (value2 == ""):
             print(color_symbol_info() + text_highlight(" Field cannot be blank"))
             continue
@@ -2579,7 +2517,7 @@ def prompt_password_gui():
 
     t_entry = wx.TextEntryDialog(frame, 'Enter Master Password: ', caption='pwmgr',
             style=wx.TE_PASSWORD|wx.CENTRE|wx.OK|wx.CANCEL, value='')
-    
+
     if (t_entry.ShowModal() == wx.ID_OK and t_entry.GetValue() != ''):
         pwd = t_entry.GetValue()
         t_entry.Destroy()
@@ -2595,10 +2533,10 @@ def gui_msg(value=''):
         return
 
     app = wx.App()
-    
+
     frame = wx.Frame(None, title='pwmgr')
     msg = wx.MessageDialog(frame, value, caption='pwmgr', style=wx.OK|wx.CENTRE)
-    
+
     msg.ShowModal()
     msg.Destroy()
 
@@ -2606,20 +2544,20 @@ def gui_msg(value=''):
 def gui_confirmation(value=''):
 
     app = wx.App()
-    
+
     frame = wx.Frame(None, title='pwmgr')
-    
+
     msg = wx.MessageDialog(frame, value, caption='pwmgr', style=wx.OK|wx.CANCEL|wx.CENTRE)
-    
+
     ID = msg.ShowModal()
-    
+
     if (ID == wx.ID_OK):
         msg.Destroy()
         return True
     else:
         msg.Destroy()
         return False
-   
+
 
 def prompt_yes_no(question="", default=True, enable_color=True):
 
@@ -2888,7 +2826,7 @@ def color_theme_2():
 
 def color_theme_3():
 
-    s = '\x1B[1;38;5;214m\x1B[1;48;5;237m'
+    s = '\x1B[1;38;5;214m\x1B[1;48;5;233m'
     return s
 
 
@@ -3002,7 +2940,7 @@ def color_menu_text(text=''):
 
 def color_menu_informational(text='', left_indent=0):
 
-    global theme 
+    global theme
 
     indent = '  '
 
@@ -3028,14 +2966,10 @@ def color_menu_column_header(header_list=[], left_indent=7):
 
     ratio_total = 0
 
-    header_text = ''
-
     for i in range(len(header_list)):
         ratio_total = ratio_total + header_list[i][1]
 
     total_length = len(text_list) - left_indent
-
-    master_list = [] 
 
     mark = 0
 
@@ -3056,7 +2990,7 @@ def color_menu_column_header(header_list=[], left_indent=7):
             right_space -= 1
 
     text = theme + ' ' * left_indent + ''.join(text_list) + color_reset()
-        
+
     return text
 
 
@@ -3098,7 +3032,6 @@ def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
     for i in range(1,len(data_list)):
         space_partition = int((len(text_list) * ratio[i-1]) / ratio_total)
         char_list = list(data_list[i])
-        right_space = space_partition - len(char_list)
 
         if (len(char_list) > space_partition):
             new_list = char_list[:space_partition-5]
@@ -3129,7 +3062,7 @@ def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
                 mark += 1
 
     text = color_b('yellow') + ''.join(str_list) + color_reset() + ''.join(text_list) 
-        
+
     return text
 
 
@@ -3166,11 +3099,9 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
     str_list.append(')')
     str_list.append(' ')
 
-    mark = 0
-    
     list_to_be_processed = []
 
-    for i in range(1,len(data_list)):
+    for i in range(1, len(data_list)):
 
         space_partition = int((len(text_list) * ratio[i-1]) / ratio_total)
         char_list = list(data_list[i][0])
@@ -3185,7 +3116,7 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
             if (v == l_len):
                 for j in range(0, c_len):
                     l[j] = char_list[j]
-                
+
                 l[-1] = ' '
                 l[-2] = ' '
                 l[-3] = ' '
@@ -3195,7 +3126,7 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
             else:
                 for j in range(0, l_len):
                     l[j] = char_list[j]
-                
+
                 l[-1] = ' '
                 l[-2] = ' '
                 l[-3] = ' '
@@ -3224,14 +3155,14 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
             data_list[5][1] + ''.join(list_to_be_processed[4]) + color_rst 
 
     print(text)
-        
+
 
 def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
 
     global term_len_h, theme, field_color_fg
-    
+
     if (len(data_list) == 0 or len(field_list) == 0):
-        return 
+        return
 
     if (term_len_h < 50):
         print(text_error('Terminal size too small to display data'))
@@ -3267,17 +3198,17 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
     for i in range(len(data_list)):
 
         h_list = list(' ' * header_width)
-        
+
         # text_list is the remaining data + space after header field
         text_list = []
-        
+
         field = '%s ' % field_list[i]
         f_list_char = list(field)
         d_list_char = list(data_list[i])
-        
+
         for j in range(len(f_list_char)):
             h_list[j] = f_list_char[j]
-        
+
         text = ''
 
         text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
@@ -3309,7 +3240,7 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             print(text)
 
-            blank_header = h_list  
+            blank_header = h_list
 
             for crab_c in range(len(blank_header)):
 
@@ -3322,14 +3253,13 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                 text = field_color_fg + indent_text + \
                         blank_header + color_reset() + ''.join(line) + \
                         color_reset()
-        
-                print(text)
 
+                print(text)
         else:
 
             for k in range(len(d_list_char)):
                 text_l_obj[k] = d_list_char[k]
-        
+
             if (i == 1):
 
                 text = field_color_fg + indent_text + \
@@ -3340,11 +3270,11 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                 print()
 
             else:
-                
+
                 text = field_color_fg + indent_text + \
                         text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
                         color_reset()
-        
+
                 print(text)
 
     sec_mem_handler.wipe_memory()
@@ -3353,13 +3283,15 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
 
     global term_len_h, theme, field_color_fg, enc_db_handler, sec_mem_handler
-    
+
     if (len(data_list) == 0 or len(field_list) == 0 or index == None):
-        return 
+        return
 
     if (term_len_h < 50):
         print(text_error('Terminal size too small to display data'))
         sys.exit(1)
+
+    sec_mem_handler = None
 
     try:
 
@@ -3382,11 +3314,11 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
     count = 0
 
-    while (True):
+    try:
 
-        sleep(0.05)
+        while (True):
 
-        try:
+            sleep(0.05)
 
             term_length_var = os.get_terminal_size()[0]
 
@@ -3399,7 +3331,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                 count += 1
 
                 term_len_h = term_length_var
-                clear_screen() 
+                clear_screen()
 
                 print_block(1)
                 print(plain_menu_bars())
@@ -3416,17 +3348,17 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                 for i in range(len(data_list)):
 
                     h_list = list(' ' * header_width)
-                    
+
                     # text_list is the remaining data + space after header field
                     text_list = []
-                    
+
                     field = '%s ' % field_list[i]
                     f_list_char = list(field)
                     d_list_char = list(data_list[i])
-                    
+
                     for j in range(len(f_list_char)):
                         h_list[j] = f_list_char[j]
-                    
+
                     text = ''
 
                     text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
@@ -3471,14 +3403,14 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                             text = field_color_fg + indent_text + \
                                     blank_header + color_reset() + ''.join(line) + \
                                     color_reset()
-                    
+
                             print(text)
 
                     else:
 
                         for k in range(len(d_list_char)):
                             text_l_obj[k] = d_list_char[k]
-                    
+
                         if (i == 1):
 
                             text = field_color_fg + indent_text + \
@@ -3493,19 +3425,24 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                             text = field_color_fg + indent_text + \
                                     text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
                                     color_reset()
-                    
+
                             print(text)
 
                 print_block(1)
                 print(plain_menu_bars())
                 print_block(1)
 
-        except OSError:
-            pass
-        except KeyboardInterrupt:
-            pass
+    except OSError:
+        pass
+    except KeyboardInterrupt:
+        pass
 
-    sec_mem_handler.wipe_memory()
+    try:
+        if (sec_mem_handler != None):
+            sec_mem_handler.wipe_memory()
+    except OverflowError:
+        pass
+
     cursor_show()
     sys.exit(0)
 
@@ -3884,7 +3821,7 @@ def clear_screen():
     """
 
     cmd = 'clear'
-        
+
     os.system(cmd)
 
 
@@ -3907,7 +3844,7 @@ def run_cmd(cmd=[], verbose=False):
 
     """
     Executes bash commands on local Linux system
-    """ 
+    """
 
     if (cmd != []):
         process = subprocess.Popen(cmd, shell=True, \
@@ -4044,8 +3981,8 @@ def gen_pass_secure(length=10, debug=False, grid=True, enableSymbols=True):
     """
     Generates a grid of 10 passwords of length 10,
         and selects a random column among them
-        
-    Args: 
+
+    Args:
         length (int): Length of the generated password
         debug(bool):  Prints all generated passwords
         grid(bool):   Returns a grid of generated password
@@ -4053,7 +3990,7 @@ def gen_pass_secure(length=10, debug=False, grid=True, enableSymbols=True):
 
         enableSymbols (bool): Allow symbols in password (default: True)
 
-    Returns: 
+    Returns:
         (str): Generated password
 
                 or
@@ -4064,7 +4001,7 @@ def gen_pass_secure(length=10, debug=False, grid=True, enableSymbols=True):
     password_array = []
 
     for i in range(length):
-        
+
         password_array.append(gen_pass(length, enableSymbols, debug))
 
     password = ""
@@ -4098,7 +4035,7 @@ def update_missing_type(pwd=''):
     ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
     output = get_max_missing_type(pwd)
-    
+
     pwd_list = list(pwd)
 
     if (output[1] != []):
@@ -4108,19 +4045,18 @@ def update_missing_type(pwd=''):
         for i in output[1]:
 
             if i == 0:
-               c  = "%s" % (rand_list(symbols))
+                c  = "%s" % (rand_list(symbols))
             elif i == 1:
-               c  = "%s" % (rand_list(num))
+                c  = "%s" % (rand_list(num))
             elif i == 2:
-               c  = "%s" % (rand_list(lcase))
+                c  = "%s" % (rand_list(lcase))
             elif i == 3:
-               c  = "%s" % (rand_list(ucase))
+                c  = "%s" % (rand_list(ucase))
             
             index = get_type_index(pwd, output[0])
 
             if (index != None):
                 pwd_list[index] = c
-
 
         updated_value = update_missing_type(''.join(pwd_list))
 
@@ -4135,7 +4071,7 @@ def get_type_index(s, char_type):
     """
     Returns first occurence of the character set type
 
-    Parameters: 
+    Parameters:
     s = (str)
 
     char_type:
@@ -4352,10 +4288,8 @@ def search_bar_show():
 
     global enc_db_handler
 
-    bg = '#2A9BFB'
-    
     summary_list = enc_db_handler.get_summary()
-    
+
     try:
 
         index = run_searchbar(summary_list)
@@ -4387,7 +4321,7 @@ def search_bar_copy():
     global enc_db_handler
 
     summary_list = enc_db_handler.get_summary()
-    
+
     index = run_searchbar(summary_list)
 
     if (index == None):
@@ -4421,19 +4355,19 @@ def menu_generate_password():
     pwd = ''
 
     length = prompt_int(color + " Enter password length (default - 10): " + rst, 10, 6, 30)
-    
+
     print_block(1)
 
     enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ", True)
-    
+
     cursor_hide()
 
     while (pwd == ''):
 
         password_list = gen_pass_secure(length, False, True, enable_symbols)
-    
+
         for password in password_list:
-    
+
             output = detect_screen_res_change()
 
             if (output[0]):
@@ -4446,18 +4380,18 @@ def menu_generate_password():
 
             print(color_symbol_info() + \
                     text_highlight(" Generated password:  "), text_color(password))
-    
+
             print_block(5)
 
             menu_text = "(G) Generate password | (S) Select | (Q) Quit"
-    
+
             print(color_menu_bars_dynamic(' ', term_length_var))
             print(color_menu_text(menu_text))
             print(color_menu_bars_dynamic(' ', term_length_var))
 
             while (True):
                 char = getch()
-    
+
                 if (char == 'g' or char == 'G'):
                     break
                 elif (char == 's' or char == 'S'):
@@ -4469,7 +4403,7 @@ def menu_generate_password():
                     sys.exit(1)
                 else:
                     pass
-    
+
             if (pwd != ''):
                 break
 
@@ -4500,23 +4434,27 @@ def menu_generate_password_standalone():
     pwd = ''
 
     length = prompt_int(color + " Enter password length (default - 10): " + rst, 10, 6, 30)
-    
+
+    print_block(1)
+
     enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ", True)
-    
+
+    print_block(1)
+
     cursor_hide()
 
-    
+
     while (pwd == ''):
 
         password_list = gen_pass_secure(length, False, True, enable_symbols)
-    
+
         for password in password_list:
 
             output = detect_screen_res_change()
 
             if (output[0]):
                 term_length_var = output[1]
-    
+
             custom_refresh(1,0)
             print(color_menu_bars_dynamic(' ', term_length_var))
             print(color_menu_bars_dynamic(' ', term_length_var))
@@ -4524,11 +4462,11 @@ def menu_generate_password_standalone():
 
             print(color_symbol_info() + \
                     text_highlight(" Generated password:  "), text_color(password))
-    
+
             print_block(5)
 
             menu_text = "(G) Generate password | (Q) Quit"
-    
+
             print(color_menu_bars_dynamic(' ', term_length_var))
             print(color_menu_text(menu_text))
             print(color_menu_bars_dynamic(' ', term_length_var))
@@ -4536,7 +4474,7 @@ def menu_generate_password_standalone():
             while (True):
 
                 char = getch()
-    
+
                 if (char == 'g' or char == 'G'):
                     break
                 elif (char == 'q' or char == 'Q'):
@@ -4545,7 +4483,7 @@ def menu_generate_password_standalone():
                     sys.exit(1)
                 else:
                     pass
-    
+
             if (pwd != ''):
                 break
 
@@ -4805,7 +4743,7 @@ def remove_keyfile():
     if (kf == ''):
         print(text_error('No keyfile found in config'))
         sys.exit(1)
-    
+
     master_key = enc_db_handler.get_key()
     pw  = ''
 
@@ -4823,7 +4761,7 @@ def remove_keyfile():
             continue
 
         key = enc_db_handler.generate_new_key(value1, False, False, kf)
-            
+
         if (key != master_key):
             print(text_error("Master password is incorrect, try again"))
             continue
@@ -4845,7 +4783,7 @@ def remove_keyfile():
 
 
 def update_progress_bar_classic(index=1,index_range=10, left_indent=10, right_indent=5):
-   
+
     """
     Classic progress bar 
 
@@ -4859,7 +4797,7 @@ def update_progress_bar_classic(index=1,index_range=10, left_indent=10, right_in
 
     #TODO: Fix the transition color when it reaches 50%,
     #      should be one digit at a time
-    
+
     color = color_pair('white_blue')
 
     bar_length = 20
@@ -4872,15 +4810,15 @@ def update_progress_bar_classic(index=1,index_range=10, left_indent=10, right_in
     percentage_remaining_str = '%3d' % percentage_remaining
 
     if (index >= index_range-2):
-            progress_text = ' '
-            total_text[center-2] = '1'
-            total_text[center-1] = '0'
-            total_text[center] = '0'
-            total_text[center+1] = '%'
-            remaining_text = ''.join(total_text[:])
+        progress_text = ' '
+        total_text[center-2] = '1'
+        total_text[center-1] = '0'
+        total_text[center] = '0'
+        total_text[center+1] = '%'
+        remaining_text = ''.join(total_text[:])
 
-            new_text = color_reset() + ' '*left_indent + color + color_b('white') + \
-                    '[ ' + remaining_text + ' ]' + color_reset() + ' ' *right_indent
+        new_text = color_reset() + ' '*left_indent + color + color_b('white') + \
+                '[ ' + remaining_text + ' ]' + color_reset() + ' ' *right_indent
     else:
 
         total_text[center-2] = percentage_remaining_str[0]
@@ -4890,7 +4828,6 @@ def update_progress_bar_classic(index=1,index_range=10, left_indent=10, right_in
 
         ratio = float(index/index_range * 1.0)
         progress_amount = int(bar_length * ratio)
-        remaining_amount = bar_length - progress_amount
 
         progress_text = ''.join(total_text[:progress_amount])
         remaining_text = ''.join(total_text[progress_amount:])
@@ -4913,197 +4850,6 @@ def update_progress_bar_classic(index=1,index_range=10, left_indent=10, right_in
 #                         Password Migration Options                       #
 #===========================================================================
 
-
-def get_pass_directory():
-    username = get_username()
-    get_pass_directory = ''
-
-    system_name = platform.system().lower()
-
-    if (system_name == 'linux' or system_name == 'darwin' \
-            or system_name == 'posix'):
-        get_pass_directory = '/home/%s/.password-store/' % username
-    else:
-        raise OSNotSupportedException()
-
-    return get_pass_directory
-    
-
-def get_file_list(path=''):
-
-    if (path == ''):
-        return
-
-    scan = os.scandir(path)
-
-    dir_list  = []
-    file_list = []
-
-    for item in scan:
-        if (item.is_dir()):
-            dir_list.append('%s/' % item.path)
-        elif (item.is_file()):
-            file_list.append(['',item.name])
-        else:
-            pass
-
-    while (len(dir_list) != 0):
-        new_list = crawl_directory(dir_list[0])
-        dir_list.pop(0)
-        file_list = file_list + new_list[1]
-        dir_list = dir_list + new_list[0]
-
-    for i in range(len(file_list)):
-        file_list[i][1] = file_list[i][1][:-4]
-    
-    return file_list
-
-
-def crawl_directory(path=''):
-
-    if (path == ''):
-        return
-
-    scan = os.scandir(path)
-
-    dir_list  = []
-    file_list = []
-
-    group_name = path.split('/')[-2]
-
-    for item in scan:
-        if (item.is_dir()):
-            dir_list.append(item.path)
-        elif (item.is_file()):
-
-            file_list.append([group_name, item.name])
-        else:
-            pass
-
-    new_list = [dir_list,file_list]
-
-    return new_list
-
-
-def parse_pass():
-
-    cursor_hide()
-
-    dir_path = get_pass_directory()
-
-    # file_list format: [groupname, file_name]
-    file_list = get_file_list(dir_path)
-
-    # We'll return new_list from this function
-    # format: [group_name, site_name, password, last_modified]
-    new_list = []
-
-    print_block(2)
-    print('\t\t       %s' % 'Importing from Pass')
-    print_block(1)
-
-    length = len(file_list)
-    #length = 10 # Setting to 10 for testing
-
-    cmd = "stat -c '%y'"
-
-    for i in range(length):
-
-        update_progress_bar_classic(i, length,20,10, 'cyan')
-
-        if (file_list[i][0] == ''):
-            stdout,stderr,rc = run_cmd('pass show %s' % file_list[i][1])
-            stdout2,stderr2,rc2 = run_cmd('%s %s%s.gpg' % (cmd, dir_path, file_list[i][1]))
-        else:
-            stdout,stderr,rc = run_cmd('pass show %s/%s' % (file_list[i][0],file_list[i][1]))
-            stdout2,stderr2,rc2 = run_cmd('%s %s%s/%s.gpg' % (cmd, dir_path, file_list[i][0], file_list[i][1]))
-
-        if (stdout == ''):
-            pass
-        else:
-            #data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip()]
-            l_modified = stdout2.split('.')[0].strip()
-            date = l_modified.split(' ')[0]
-            day = date.split('-')[2]
-            month = date.split('-')[1]
-            year = date.split('-')[0]
-            formatted_date = '%s-%s-%s' % (day, month, year)
-            time = l_modified.split(' ')[1][:-3]
-            formatted_l_mod = '%s %s' % (formatted_date, time)
-
-            data_format = [file_list[i][0], file_list[i][1], stdout.split('\n')[0].strip(), formatted_l_mod]
-            new_list.append(data_format)
-
-    for i in range(len(new_list)):
-        if ('Generated_Password_for_' in new_list[i][1]):
-            new_list[i][1] = new_list[i][1].split('Generated_Password_for_')[1]
-
-    cursor_show()
-
-    #for item in new_list:
-    #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))
-
-    return new_list
-
-    
-def import_from_pass():
-
-    """
-    Imports all relevant information from pass 
-    """
-
-    global enc_db_handler, db_file_path
-    
-    custom_refresh(3,2)
-
-    custom_list = []
-    record_list = []
-
-    if (prompt_yes_no("Do you want to import from pass? (Y/n): ", True)):
-        custom_refresh(3,2)
-        custom_list = parse_pass()
-    else:
-        print(text_error("Nothing to do, quitting..."))
-        sys.exit(1)
-
-    #for item in custom_list:
-    #    print("Group: %s\tSite: %s\tPass: %s" % (item[0],item[1],item[2]))
-
-    if (len(custom_list) != 0):
-
-        for i in range(len(custom_list)):
-
-            if (custom_list[i][1] == '' or custom_list[i][2] == ''):
-
-                pass
-
-            else:
-
-                if (custom_list[i][3] != ''):
-                    r = Record(custom_list[i][1], custom_list[i][2], custom_list[i][3])
-                else:
-                    r = Record(custom_list[i][1], custom_list[i][2])
-                
-                if (custom_list[i][0] != ''):
-                    r.set_group(custom_list[i][0])
-
-                record_list.append(r) 
-
-        enc_db_handler.add(record_list)
-
-        enc_db_handler.write_encrypted_database(db_file_path)
-
-        custom_refresh(3,1)
-        print(text_debug("(%d) Passwords were successfully imported" % (len(record_list))))
-
-    else:
-        print(text_error('No passwords were found'))
-
-    print_block(1)
-    print(color_menu_bars())
-    print_block(1)
-
-
 def import_from_csv(file_name):
 
     """
@@ -5111,17 +4857,16 @@ def import_from_csv(file_name):
     """
 
     global enc_db_handler, db_file_path
-    
+
     fh = open(file_name)
 
     data_list = fh.read().splitlines()
-    
+
     processed_data = csv.reader(data_list, quotechar='"', delimiter=',', \
             quoting=csv.QUOTE_ALL, skipinitialspace=True)
-    
+
 
     csv_list = []
-
 
     for item in processed_data:
         csv_list.append(item)
@@ -5135,10 +4880,9 @@ def import_from_csv(file_name):
 
         if (len(r) == 2):
             # Discarding header
-            s = ','.join(r)
 
-            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
-                    l(r[1]).strip() in ['password', 'pass', 'pwd']):
+            if (r[0].strip() in ['site', 'website', 'address'] and \
+                    r[1].strip() in ['password', 'pass', 'pwd']):
 
                 csv_list = csv_list[1:]
 
@@ -5146,11 +4890,9 @@ def import_from_csv(file_name):
 
         elif (len(r) == 3):
 
-            s = ','.join(r)
-
-            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
-                    l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
-                    l(r[2]).strip() in ['username', 'user', 'usr']):
+            if (r[0].strip() in ['site', 'website', 'address'] and \
+                    r[1].strip() in ['password', 'pass', 'pwd'] and \
+                    r[2].strip() in ['username', 'user', 'usr']):
 
                 csv_list = csv_list[1:]
 
@@ -5158,12 +4900,10 @@ def import_from_csv(file_name):
 
         elif (len(r) == 4):
 
-            s = ','.join(r)
-
-            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
-                    l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
-                    l(r[2]).strip() in ['username', 'user', 'usr'] and \
-                    l(r[3]).strip() in ['email', 'mail']):
+            if (r[0].strip() in ['site', 'website', 'address'] and \
+                    r[1].strip() in ['password', 'pass', 'pwd'] and \
+                    r[2].strip() in ['username', 'user', 'usr'] and \
+                    r[3].strip() in ['email', 'mail']):
 
                 csv_list = csv_list[1:]
 
@@ -5171,13 +4911,11 @@ def import_from_csv(file_name):
 
         elif (len(r) == 5):
 
-            s = ','.join(r)
-
-            if (l(r[0]).strip() in ['site', 'website', 'address'] and \
-                    l(r[1]).strip() in ['password', 'pass', 'pwd'] and \
-                    l(r[2]).strip() in ['username', 'user', 'usr'] and \
-                    l(r[3]).strip() in ['email', 'mail'] and \
-                    l(r[4]).strip() in ['notes', 'comment', 'remark']):
+            if (r[0].strip() in ['site', 'website', 'address'] and \
+                    r[1].strip() in ['password', 'pass', 'pwd'] and \
+                    r[2].strip() in ['username', 'user', 'usr'] and \
+                    r[3].strip() in ['email', 'mail'] and \
+                    r[4].strip() in ['notes', 'comment', 'remark']):
 
                 csv_list = csv_list[1:]
 
@@ -5230,8 +4968,6 @@ def export_to_csv(file_name, brief=False):
 
     global enc_db_handler
 
-    n = enc_db_handler.get_number_of_records()
-
     exit_if_database_is_empty()
 
     if (brief):
@@ -5249,18 +4985,18 @@ def read_csv_pwmgr(filename=''):
     """
     Parses a csv formatted file & loads all
         information into database
-    
+
     Args:    The name of the file
-    
+
     Returns: True if the operation succeeds
              False if the operation fails
     """
 
     if (filename == ''):
         return 
-    
+
     data = []
-    
+
     try:
 
         fh = open(filename, 'r')
@@ -5272,14 +5008,14 @@ def read_csv_pwmgr(filename=''):
 
     except IOError as e:
         print(e)
-    
+
     fh.close()
-    
+
     if (len(data) != 0 and test_if_single_quoted(data[0])):
         data = remove_single_quote_from_list(data)
 
     return data
-    
+
 
 def test_if_single_quoted(record=[]):
 
@@ -5300,7 +5036,7 @@ def remove_single_quote_from_list(f=[]):
         _row = []
 
         for item in row:
-            
+
             if (item.startswith("'") and item.endswith("'")):
                 _row.append(item[1:-1])
             else:
@@ -5327,16 +5063,6 @@ def write_csv_pwmgr(data=[], filename=''):
 
     except IOError as e:
         print(e)
-
-
-#===========================================================================#
-#                               Custom Exceptions                           #
-#===========================================================================#
-
-
-class OSNotSupportedException(Exception):
-    def __init__(self, msg='Only Linux OS is supported at the moment'):
-        super(OSNotSupportedException, self).__init__(msg)
 
 
 def main():

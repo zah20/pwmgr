@@ -1,4 +1,20 @@
 
+    Version 2.4 (05/29/2023)
+    ========================
+
+     [x] Code audits were made through open source static code analysis software
+         such as prospector, pylint, etc. as a result a lot of unused variables, 
+         functions, imports, etc. were removed, indentation as well as other exception 
+         handling issues were fixed, leading to a much more stable code base
+
+     [x] Edit function upgrade
+
+            [x] Now integrated with secure memory wipe feature
+            [x] Colors from theme are now displayed for header fields
+
+     [x] Removed database migration options from 'pass unix pwmgr' as we have import-csv function
+
+
     Version 2.3.0 (04/26/2023)
     ==========================
     
