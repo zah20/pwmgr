@@ -1,6 +1,27 @@
 
-    Version 2.4 (05/29/2023)
-    ========================
+    Version 2.4.1 (06/03/2023)
+    ==========================
+
+    [x] Fixed add fn with duplicate entry code fault. I worked on this long time
+        ago, but I didn't realize that apt's messed it up down the line.
+        This makes me look like a bad coder :/
+
+        With such a big code base one doesn't always have time to test everything.
+        I'm tired of these idiots, it's not the first time they've messed with
+        my stuff. Like a bunch of crabs they try to bring you down 
+        just to show how good they are at hacking.
+
+        Why don't you hack your genes and grant yourself immortality? I'm pretty sure
+        such narrow minded crabs dont have that.
+
+        If you don't like my code, don't touch it. If you want to prove
+        something to us, give us something we need. All the biggy guys didn't
+        give us anything but faulty, backdoored bullshit software as gifts,
+        othertimes nothing at all for decades. Who needs people like those?
+
+
+    Version 2.4.0 (05/29/2023)
+    ==========================
 
      [x] Code audits were made through open source static code analysis software
          such as prospector, pylint, etc. as a result a lot of unused variables, 

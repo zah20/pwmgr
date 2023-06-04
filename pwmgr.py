@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 
 import csv, wx, base64
-import os, subprocess, sys
-from getpass import getpass
+import subprocess, sys, os
+from random import seed, randint
 from database_pwmgr import Record, ManageRecord, \
         IncorrectKeyException, IncorrectPasswordException, IntegrityCheckFailedException, \
         AllocateSecureMemory, UnsupportedFileFormatException, SecureClipboardCopyFailedException, \
         MemoryAllocationFailedException, KeyFileInvalidException
-from random import seed, randint
+from getpass import getpass
 from getch import getch
 from time import sleep
 
@@ -38,14 +38,15 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.4.0'
-__last_updated__ =  '05/29/2023'
+__version__      =  '2.4.1'
+__last_updated__ =  '06/03/2023'
 __license__      =  'GPLv3'
 
 
 global enc_db_handler, app_name, file_name, pw_master, \
-        password_in_keyring, term_len_h, db_file_path, \
-        theme, field_color_fg, config, config_file
+        password_in_keyring, db_file_path, \
+        term_len_h, theme, field_color_fg, term_bar_color, \
+        config, config_file
 # All configs / database is stored under '~/.config/pwmgr/'
 password_in_keyring=False
 enc_db_handler = None
@@ -58,6 +59,7 @@ theme = 1
 config_file = ''
 db_file_path = ''
 field_color_fg = ''
+term_bar_color = ''
 
 
 """
@@ -177,7 +179,7 @@ def parse_args():
 
     """
 
-    global term_len_h, config, theme, field_color_fg
+    global term_len_h, config, theme, field_color_fg, term_bar_color
 
     argument_length = len(sys.argv)
 
@@ -212,23 +214,31 @@ def parse_args():
         if (_theme == 1):
             theme = color_theme_1()
             field_color_fg = '\x1B[1;38;5;33m'
+            term_bar_color = '\x1B[1;38;5;75m'
         elif (_theme == 2):
             theme = color_theme_2()
             field_color_fg = '\x1B[1;38;5;46m'
+            term_bar_color = '\x1B[1;38;5;48m'
         elif (_theme == 3):
             theme = color_theme_3()
             field_color_fg = '\x1B[1;38;5;214m'
+            term_bar_color = '\x1B[1;38;5;216m'
         elif (_theme == 4):
             theme = color_theme_4()
             field_color_fg = '\x1B[1;38;5;44m'
+            term_bar_color = '\x1B[1;38;5;14m'
         elif (_theme == 5):
             theme = color_theme_5()
-            field_color_fg = '\x1B[1;38;5;210m'
+            field_color_fg = '\x1B[1;38;5;208m'
+            term_bar_color = '\x1B[1;38;5;216m'
         elif (_theme == 6):
             theme = color_theme_6()
             field_color_fg = '\x1B[1;38;5;38m'
+            term_bar_color = '\x1B[1;38;5;45m'
         else:
             theme = color_theme_1()
+            field_color_fg = '\x1B[1;38;5;33m'
+            term_bar_color = '\x1B[1;38;5;75m'
 
         if (argument_length == 2):
 
@@ -1047,12 +1057,30 @@ def add():
     """
 
     global enc_db_handler, db_file_path, field_color_fg
-    
-    custom_refresh(3,2)
 
-    site = prompt(" Website name: ")
+    cursor_show()
+    clear_screen()
+    print_block(3)
+    print(color_menu_informational("   Press (Enter) to Skip | (Ctrl+C) Quit without saving" + ' '*4))
+    print_block(2)
+
+    site = prompt("Website: ")
 
     pwd = ''
+
+    r = Record(site, pwd)
+
+    if (enc_db_handler.check_duplicate_entry(r)):
+
+        print_block(1)
+
+        if (not prompt_yes_no("Duplicate entry found. Do you want to continue? (y/N): ", False, False)):
+            print_block(1)
+            print(text_debug("Record has been discarded"))
+            print_block(1)
+            print(plain_menu_bars())
+            print_block(1)
+            sys.exit(0)
 
     print_block(1)
 
@@ -1067,41 +1095,28 @@ def add():
 
     print_block(1)
 
-    choice = prompt_yes_no("Do you want to add additional info? (y/N): ", False)
+    choice = prompt_yes_no("Do you want to add more info? (y/N): ", False)
 
     if (choice):
-        custom_refresh(3,2)
+        clear_screen()
+        print_block(3)
         print(color_menu_informational("The information below is Optional." + \
                 " (Press Enter if you want to skip)   "))
 
-        print_block(3)
-        cursor_show()
+        print_block(2)
         email = prompt_blank_fixed_width("Email: ")
-        cursor_hide()
         print_block(1)
-        cursor_show()
         group = prompt_blank_fixed_width("Group: ")
-        cursor_hide()
         print_block(1)
-        cursor_show()
         usr = prompt_blank_fixed_width("Username: ")
-        cursor_hide()
         print_block(1)
-        cursor_show()
         phone = prompt_blank_fixed_width("Phone#: ")
-        cursor_hide()
         print_block(1)
-        cursor_show()
         remark = prompt_blank_fixed_width("Notes: ")
-        cursor_hide()
         print_block(1)
-        cursor_show()
         recovery_email = prompt_blank_fixed_width("Recovery email: ", 16)
-        cursor_hide()
         print_block(1)
-        cursor_show()
         two_factor = prompt_yes_no("Two Factor enabled? (y/N): ", False)
-        cursor_hide()
 
         if (usr != ''):
             r.set_username(usr)
@@ -1124,33 +1139,25 @@ def add():
         if (two_factor != ''):
             r.set_two_factor(two_factor)
 
-        if (enc_db_handler.check_duplicate_entry(r)):
-            if (prompt_yes_no(" Duplicate entry found. Do you want to add anyway?  (y/N): ", False, False)):
-                enc_db_handler.add(r)
-                print_block(2)
-                print(text_debug("Record has been added successfully!"))
-                print_block(2)
-                print(color_menu_bars())
-            else:
-                print_block(2)
-                print(text_debug("Record has been discarded"))
-                print_block(2)
-                print(color_menu_bars())
-                cursor_show()
-                return
-        else:
-            enc_db_handler.add(r)
-            print_block(1)
-            print(text_debug("Record has been added successfully!"))
-            print_block(1)
-            print(color_menu_bars())
-    else:
         enc_db_handler.add(r)
+        enc_db_handler.write_encrypted_database(db_file_path)
+
         print_block(1)
         print(text_debug("Record has been added successfully!"))
+        print_block(1)
+        print(plain_menu_bars())
+        print_block(1)
 
-    enc_db_handler.write_encrypted_database(db_file_path)
-    cursor_show()
+    else:
+        ## We could have removed redundant logic but this way ensures we don't
+        ## have menu bars displayed right beneath pw generation menu
+
+        enc_db_handler.add(r)
+        enc_db_handler.write_encrypted_database(db_file_path)
+
+        print_block(1)
+        print(text_debug("Record has been added successfully!"))
+        print_block(1)
 
 
 def audit_records(sort_ascending=True):
@@ -1180,7 +1187,7 @@ def audit_records(sort_ascending=True):
         print_audit_info(r, ratio)
 
     print_block(1)
-    print(color_menu_bars())
+    print(plain_menu_bars())
     print_block(1)
 
 
@@ -1362,7 +1369,7 @@ def show_summary(input_list=None):
         print(formatted_data)
 
     print_block(1)
-    print(color_menu_bars())
+    print(plain_menu_bars())
     print_block(1)
 
 
@@ -1492,7 +1499,6 @@ def show_index_multiple(index_list=None):
     global term_len_h
 
     print_block(1)
-    # print(color_menu_bars())
     print(plain_menu_bars())
     print_block(1)
 
@@ -1503,13 +1509,11 @@ def show_index_multiple(index_list=None):
         if (i == index_list[-1]):
             pass
         else:
-            print()
-            s = '-' * term_len_h
-            print(s)
-            print()
+            print_block(2)
+            # print(plain_menu_bars('\u2500', color_enable=False))
+            # print_block(1)
 
     print_block(1)
-    # print(color_menu_bars())
     print(plain_menu_bars())
     print_block(1)
 
@@ -1533,9 +1537,8 @@ def delete_index(index=None):
     elif (type(index) == list):
 
         show_summary(index)
-        print_block(1)
 
-        choice = prompt_yes_no("The records above will be deleted, continue?  (y/N): ", False, False)
+        choice = prompt_yes_no("The records above will be deleted, continue? (y/N): ", False, False)
 
         print_block(1)
 
@@ -1750,7 +1753,7 @@ def secure_edit_index(index=None):
         sys.exit(1)
 
     custom_refresh(print_menu_bars=False)
-    print(color_menu_informational("    Press (e) to edit | (Enter) to skip | (q) Quit without saving" + ' '*6))
+    print(color_menu_informational("    Press (e) to Edit | (Enter) to Skip | (q) Quit without saving" + ' '*6))
     print_block(3)
 
     color = field_color_fg
@@ -1886,7 +1889,7 @@ def secure_edit_index(index=None):
         pass
 
     cursor_show()
-    print(color_menu_bars())
+    print(plain_menu_bars())
     print_block(1)
 
 
@@ -2444,7 +2447,7 @@ def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]
                 value2 = value2.strip()
 
                 if (value2 == ""):
-                    print(text_error(" Field cannot be blank"))
+                    print(text_error("Field cannot be blank"))
                     continue
                 elif (value2 == value1):
                     return value1
@@ -2896,11 +2899,14 @@ def color_menu_bars(text=' '):
     return text
 
 
-def plain_menu_bars(text='-'):
+def plain_menu_bars(text='\u2501', color_enable=True):
 
-    global term_len_h
+    global term_len_h, term_bar_color
 
     text = text * term_len_h
+
+    if (color_enable):
+        text = term_bar_color + text + color_reset()
 
     return text
 

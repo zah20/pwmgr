@@ -36,8 +36,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.4.0'
-__last_updated__ =  '05/29/2023'
+__version__      =  '2.4.1'
+__last_updated__ =  '06/03/2023'
 __license__      =  'GPLv3'
 
 
@@ -243,7 +243,7 @@ class Record():
         """
         ## Format
         # 'dd-mm-yyyy hh:min'
-        
+
         self.__last_modified = DateTime.today().strftime("%d-%m-%Y %H:%M")
 
 
@@ -601,14 +601,12 @@ class ManageRecord():
 
         Returns: Boolean
         """
+        result = self.search_website(item.get_website(), partial_match=False)
 
-        if (self.search_website(item.get_website())):
-            if (self.search_email(item.get_email())):
-                return True
-            elif (self.search_username(item.get_username())):
-                return True
-
-        return False
+        if (len(result) != 0):
+            return True
+        else:
+            return False
 
 
     def sort(self, custom_list=None):
@@ -2529,7 +2527,6 @@ class ManageRecord():
 #               New Security Related Functions for PWMGR >= 2.3            #
 #===========================================================================
 
-
 class AllocateSecureMemory():
 
     """
@@ -2577,10 +2574,9 @@ class AllocateSecureMemory():
 
 
     def get_str(self):
-
         """
         Use this function only if you're directly providing it as input to
-        encryption / decryption functions, otherwise data may not get wiped
+        encryption / decryption functions, otherwise data may not get wiped.  
         """
         return self.__data.value.decode()
 
@@ -2633,7 +2629,6 @@ class AllocateSecureMemory():
 
 
     def has_space(self):
-
         """
         This fn is used by the frontend to check if password str has space in it
         """
