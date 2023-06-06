@@ -3522,7 +3522,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                                     if (text_l_obj[index_text_l] == ' '):
                                         index_text_l -= 1
                                     else:
-                                        text_l_obj[index_text_l] = color_rst
+                                        text_l_obj[index_text_l+1] = color_rst
                                         break
 
                                 text = field_color_fg + indent_text + text_highlight(''.join(h_list))
