@@ -1,23 +1,29 @@
 
+    Version 2.6.0 (06/05/2023)
+    ==========================
+
+    [x] 1 new theme (theme#66)
+
+        * With this theme if you use the show function (-O), it'll color code
+          the password and last modified field base on
+          relevant audit attributes.
+
+          If a record has not been audited, there will not be any colors displayed,
+            therefore make sure that you run the audit function first.
+
+    [x] For some reason audit attribute were not getting saved, that has now been fixed
+
+    [x] With introduction of sec memory feature, the last modified attribute wasn't getting
+            updated after you used edit function, that has now been fixed
+
+    [x] Removed unnecessary exception handling code for memory wipe
+
+
     Version 2.4.1 (06/03/2023)
     ==========================
 
     [x] Fixed add fn with duplicate entry code fault. I worked on this long time
         ago, but I didn't realize that apt's messed it up down the line.
-        This makes me look like a bad coder :/
-
-        With such a big code base one doesn't always have time to test everything.
-        I'm tired of these idiots, it's not the first time they've messed with
-        my stuff. Like a bunch of crabs they try to bring you down 
-        just to show how good they are at hacking.
-
-        Why don't you hack your genes and grant yourself immortality? I'm pretty sure
-        such narrow minded crabs dont have that.
-
-        If you don't like my code, don't touch it. If you want to prove
-        something to us, give us something we need. All the biggy guys didn't
-        give us anything but faulty, backdoored bullshit software as gifts,
-        othertimes nothing at all for decades. Who needs people like those?
 
 
     Version 2.4.0 (05/29/2023)
@@ -39,7 +45,7 @@
     Version 2.3.0 (04/26/2023)
     ==========================
     
-    [x] Secure memory wipe upgrade
+    [x] Secure memory wipe upgrade (need to install glibc package, checkout installation section in guide)
 
          * When copying password to clipboard or displaying a record, that was the only 
             scenario where we decrypted password in memory. It was not possible to 

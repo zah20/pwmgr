@@ -38,8 +38,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.4.1'
-__last_updated__ =  '06/03/2023'
+__version__      =  '2.6.0'
+__last_updated__ =  '06/05/2023'
 __license__      =  'GPLv3'
 
 
@@ -235,6 +235,10 @@ def parse_args():
             theme = color_theme_6()
             field_color_fg = '\x1B[1;38;5;38m'
             term_bar_color = '\x1B[1;38;5;45m'
+        elif (_theme == 66):
+            theme = color_theme_66()
+            field_color_fg = '\x1B[1;38;5;44m'
+            term_bar_color = '\x1B[1;38;5;51m'
         else:
             theme = color_theme_1()
             field_color_fg = '\x1B[1;38;5;33m'
@@ -1193,9 +1197,11 @@ def audit_records(sort_ascending=True):
 
 def process_security_data(sort_ascending=True):
 
-    global enc_db_handler
+    global enc_db_handler, db_file_path
 
     enc_db_handler.audit_security()
+    enc_db_handler.write_encrypted_database(db_file_path)
+
     sorted_indexes = enc_db_handler.sort_security_rating(sort_ascending)
 
     header = [['Site',4.2] , ['PW Age',3.4], ['PW Reuse',3], ['    PW Strength',2],  ['Security Rating',1.5]]
@@ -1206,7 +1212,7 @@ def process_security_data(sort_ascending=True):
     color_white = color_b('white')
     color_green = color_b('green')
     color_yellow = color_b('yellow')
-    color_orange = color_b('orange')
+    color_gray = '\x1B[1;38;5;246m' 
     color_red = color_b('red')
     color_special = '\x1B[1;38;5;51m'
 
@@ -1254,7 +1260,7 @@ def process_security_data(sort_ascending=True):
             color_info = '%s' % (color_yellow)
             pw_cmpx_info = ['Average', color_info]
         elif (pw_cmpx == 'w'):
-            color_info = '%s' % (color_orange)
+            color_info = '%s' % (color_gray)
             pw_cmpx_info = ['Weak', color_info]
         elif (pw_cmpx == 'u'):
             color_info = '%s' % (color_red)
@@ -1311,8 +1317,8 @@ def process_security_data(sort_ascending=True):
                 color_info = '%s' % (color_yellow)
                 s_rating_info = ['Average', color_info]
             elif (s_rating in [7,9]):
-                color_info = '%s' % (color_orange)
-                s_rating_info = ['Poor', color_info]
+                color_info = '%s' % (color_gray)
+                s_rating_info = ['Weak', color_info]
             elif (s_rating in [0,1,2,3,4,5,6]):
                 color_info = '%s' % (color_red)
                 s_rating_info = ['Critical', color_info]
@@ -1405,7 +1411,7 @@ def show_last_modified():
         print(formatted_data)
 
     print_block(1)
-    print(color_menu_bars())
+    print(plain_menu_bars())
     print_block(1)
 
 
@@ -1801,18 +1807,7 @@ def secure_edit_index(index=None):
 
                         print_block(1)
 
-                        try:
-                            sec_mem_handler_new = prompt_with_sec_mem("New value:" + ' '*5)
-                        except (OverflowError):
-                            ## If we run into error, we try to wipe off whatever
-                            ## was stored in memmory
-
-                            sec_mem_handler.wipe_memory()
-
-                            if (sec_mem_handler_new != None):
-                                sec_mem_handler_new.wipe_memory()
-
-                            sys.exit(0)
+                        sec_mem_handler_new = prompt_with_sec_mem("New value:" + ' '*5)
 
                         data_changed = True
                         pw_changed   = True
@@ -1835,17 +1830,10 @@ def secure_edit_index(index=None):
 
                 elif (char in ('q', 'Q')):
 
-                    try:
-                        if (sec_mem_handler != None):
-                            sec_mem_handler.wipe_memory()
-                    except OverflowError:
-                        pass
+                    sec_mem_handler.wipe_memory()
 
-                    try:
-                        if (sec_mem_handler_new != None):
-                            sec_mem_handler_new.wipe_memory()
-                    except OverflowError:
-                        pass
+                    if (sec_mem_handler_new != None):
+                        sec_mem_handler_new.wipe_memory()
 
                     print_block(1)
                     cursor_show()
@@ -1863,6 +1851,7 @@ def secure_edit_index(index=None):
             sys.exit(1)
 
     if (data_changed):
+
         r.set_website(data[0])
         r.set_username(data[2])
         r.set_email(data[3])
@@ -1873,20 +1862,25 @@ def secure_edit_index(index=None):
         r.set_phone_number(data[8])
 
         if (pw_changed):
+
+            r.update_last_modified()
+            r.set_pw_age('')
+            r.set_pw_complexity('')
+            r.set_pw_reuse('')
+            r.set_security_rating('')
+
             enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler_new)
+
         else:
+
             enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler)
 
         enc_db_handler.write_encrypted_database(db_file_path)
 
-    try:
-        sec_mem_handler.wipe_memory()
+    sec_mem_handler.wipe_memory()
 
-        if (sec_mem_handler_new != None):
-            sec_mem_handler_new.wipe_memory()
-
-    except Exception:
-        pass
+    if (sec_mem_handler_new != None):
+        sec_mem_handler_new.wipe_memory()
 
     cursor_show()
     print(plain_menu_bars())
@@ -2845,12 +2839,16 @@ def color_theme_5():
     return s
 
 
-
 def color_theme_6():
 
     s = '\x1B[1;38;5;214m\x1B[1;48;5;24m'
     return s
 
+
+def color_theme_66():
+
+    s = '\x1B[1;38;5;14m\x1B[1;48;5;233m'
+    return s
 
 
 def color_reset():
@@ -3075,9 +3073,9 @@ def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
 def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
 
     global term_len_h
-    
+
     # Format (data_list)  = '#', 'Site', 'pw str', 'pw age', 'pw reuse', 'sec rating'
-    # width of index is fixed at 6 chars, & ratio parameter is used to 
+    # width of index is fixed at 6 chars, & ratio parameter is used to
     # allocate space between the remaining fields site .. group
 
     number_indent = 7
@@ -3148,11 +3146,11 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
 
             for j in range(0, len(char_list)):
                 l[j] = char_list[j]
-            
+
             list_to_be_processed.append(l)
 
     color_rst = color_reset()
-    
+
     text = color_b('yellow') + ''.join(str_list) + color_rst + \
             data_list[1][1] + ''.join(list_to_be_processed[0]) + color_rst + \
             data_list[2][1] + ''.join(list_to_be_processed[1]) + color_rst + \
@@ -3288,7 +3286,7 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
 def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
 
-    global term_len_h, theme, field_color_fg, enc_db_handler, sec_mem_handler
+    global config, term_len_h, theme, field_color_fg, enc_db_handler, sec_mem_handler
 
     if (len(data_list) == 0 or len(field_list) == 0 or index == None):
         return
@@ -3297,7 +3295,32 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
         print(text_error('Terminal size too small to display data'))
         sys.exit(1)
 
+    theme_num = config.get('theme')
+
     sec_mem_handler = None
+
+    color_not_audited = '\x1B[1;38;5;250m\x1B[1;48;5;232m'
+    color_good = '\x1B[1;38;5;10m\x1B[1;48;5;232m'
+    color_neutral = '\x1B[1;38;5;11m\x1B[1;48;5;232m'
+    color_bad = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
+
+    color_rst = color_reset()
+
+    record = enc_db_handler.get_index_with_enc_pw(index) 
+
+    audit_rating = ''
+    last_mod_rating = ''
+
+    audit_rating = record.get_security_rating()
+
+    if (audit_rating != ''):
+
+        audit_rating = int(audit_rating)
+        last_mod_rating = record.get_pw_age()
+        # print(last_mod_rating)
+        # print(len(last_mod_rating))
+        # print(type(last_mod_rating))
+        # sys.exit(0)
 
     try:
 
@@ -3362,6 +3385,20 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                     f_list_char = list(field)
                     d_list_char = list(data_list[i])
 
+                    if (theme_num == 66):
+                        # f_list_char.insert(0, '\x1B[1;48;5;232m')
+                        f_list_char.insert(0, '\x1B[1;38;5;214m')
+
+                        if (f_list_char[-1] == ' '):
+                            f_list_char[-1] = color_reset()
+                        else:
+                            f_list_char.append(color_reset())
+
+                        if (not (i == 1 or i == 8)):
+                            d_list_char.insert(0, '\x1B[1;38;5;87m')
+                            # d_list_char.insert(0, '\x1B[1;38;5;87m\x1B[1;48;5;232m')
+                            # d_list_char.append(color_rst)
+
                     for j in range(len(f_list_char)):
                         h_list[j] = f_list_char[j]
 
@@ -3388,15 +3425,14 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                                 current_index += 1
 
                             text_list.append(text_l_obj)
-                            text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
+                            text_l_obj = list(' ' * (term_len_h - ((2 * indent) + header_width)))
 
                         text = field_color_fg + indent_text + \
-                                text_highlight(''.join(h_list)) + color_reset() + ''.join(text_list[0]) + \
-                                color_reset()
+                                text_highlight(''.join(h_list)) + color_reset() + ''.join(text_list[0]) + color_reset()
 
                         print(text)
 
-                        blank_header = h_list  
+                        blank_header = h_list
 
                         for crab_c in range(len(blank_header)):
 
@@ -3406,12 +3442,13 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                         for line in text_list[1:]:
 
-                            text = field_color_fg + indent_text + \
-                                    blank_header + color_reset() + ''.join(line) + \
-                                    color_reset()
+                            if (theme_num == 66):
+                                #text_list.insert(1, '\x1B[1;38;5;87m')
+                                text = indent_text + blank_header + '\x1B[1;38;5;87m' + ''.join(line) + color_reset()
+                            else:
+                                text = field_color_fg + indent_text + blank_header + color_reset() + ''.join(line) + color_reset()
 
                             print(text)
-
                     else:
 
                         for k in range(len(d_list_char)):
@@ -3419,20 +3456,83 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                         if (i == 1):
 
-                            text = field_color_fg + indent_text + \
-                                    text_highlight(''.join(h_list)) + color_reset() 
+                            pw_sec_color = ''
 
+                            text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + color_reset()
                             sys.stdout.write(text)
-                            sec_mem_handler.print_str()
+
+                            if (theme_num == 66):
+
+                                if (audit_rating == ''):
+                                    pw_sec_color = color_not_audited
+                                elif (audit_rating >= 12):
+                                    pw_sec_color = color_good
+                                elif (audit_rating >= 10):
+                                    pw_sec_color = color_neutral
+                                else:
+                                    pw_sec_color = color_bad
+
+                                sys.stdout.write('%s' % pw_sec_color)
+                                sec_mem_handler.print_str()
+                                sys.stdout.write('%s' % color_rst)
+
+                            else:
+                                sec_mem_handler.print_str()
+
                             print()
 
                         else:
 
-                            text = field_color_fg + indent_text + \
-                                    text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
-                                    color_reset()
+                            if (i == 8 and theme_num == 66):
 
-                            print(text)
+                                """
+                                Rates overall security posture of all records in database
+
+                                    Ratings: 
+
+                                    pw_age (3):          'n' =  3, 'o' =  2, 'r' = -1
+                                    pw_reuse (6):        '0' =  6, '1' =  0
+                                    pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
+                                    ___________________________________________________________________________
+                                    Total score (15):    max = 15, min = 0 (negative values are set to 0)
+
+                                """
+
+                                # print('hallo hallo')
+                                # sys.exit(1)
+                                ## pw_age (3): 'n' =  3, 'o' =  2, 'r' = -1
+
+                                last_mod_color = ''
+
+                                if (last_mod_rating == 'n'):
+                                    last_mod_color = color_good
+                                elif (last_mod_rating == 'o'):
+                                    last_mod_color = color_neutral
+                                elif (last_mod_rating == 'r'):
+                                    last_mod_color = color_bad
+                                else:
+                                    last_mod_color = color_not_audited
+
+                                text_l_obj.insert(0, last_mod_color)
+
+                                index_text_l = len(text_l_obj) - 1
+
+                                while (index_text_l >= 0):
+
+                                    if (text_l_obj[index_text_l] == ' '):
+                                        index_text_l -= 1
+                                    else:
+                                        text_l_obj[index_text_l] = color_rst
+                                        break
+
+                                text = field_color_fg + indent_text + text_highlight(''.join(h_list))
+                                sys.stdout.write(text)
+                                sys.stdout.write(''.join(text_l_obj))
+                                print()
+
+                            else:
+                                text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + color_rst + ''.join(text_l_obj) + color_rst
+                                print(text)
 
                 print_block(1)
                 print(plain_menu_bars())
@@ -3443,11 +3543,8 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
     except KeyboardInterrupt:
         pass
 
-    try:
-        if (sec_mem_handler != None):
-            sec_mem_handler.wipe_memory()
-    except OverflowError:
-        pass
+    if (sec_mem_handler != None):
+        sec_mem_handler.wipe_memory()
 
     cursor_show()
     sys.exit(0)
@@ -4244,11 +4341,14 @@ def run_searchbar(input_list=[]):
         _color_background = '#015072'
         _color_foreground = '#FFFFFF'
     elif (config.get('theme') == 5):
-        _color_background = '#905e07'
+        _color_background = '#844306'
         _color_foreground = '#FFFFFF'
     elif (config.get('theme') == 6):
-        _color_background = '#094e6c' 
+        _color_background = '#013951'
         _color_foreground = '#FFB737'
+    elif (config.get('theme') == 66):
+        _color_background = '#010304'
+        _color_foreground = '#0fc6ff'
     else:
         # Setting to default theme 1, if no theme found
         _color_background = '#1C51A3'
@@ -5078,7 +5178,7 @@ def main():
     try:
         parse_args()
     except KeyboardInterrupt:
-        print_block(2)
+        cursor_show()
         sys.exit(1)
 
 
