@@ -36,8 +36,8 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.6.0'
-__last_updated__ =  '06/05/2023'
+__version__      =  '2.6.1'
+__last_updated__ =  '06/16/2023'
 __license__      =  'GPLv3'
 
 
@@ -523,6 +523,31 @@ class ManageRecord():
             raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
 
         return sec_mem_handler
+
+
+    def get_pw_of_record(self, record_obj=None, enc_key=''):
+
+        """
+        Decrypted pw of given record (used in audit_pw_reuse() in audit function)
+        """
+        
+        pw = record_obj.get_password()
+
+        fernet_handler = ''
+
+        if (enc_key == ''):
+            fernet_handler = Fernet(self.__encryption_key_2)
+        else:
+            fernet_handler = Fernet(enc_key)
+
+        pw = bytes(pw, 'utf-8')
+
+        try:
+            pw = fernet_handler.decrypt(pw).decode('utf-8')
+        except InvalidToken:
+            raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
+
+        return pw
 
 
     def get_number_of_records(self):
@@ -1639,7 +1664,7 @@ class ManageRecord():
                     file_handler.write(self.__encrypted_data)
                     return True
             except IOError:
-                print("write_encrypted_database(): error#03 occured while writing database")
+                print("write_encrypted_database(): error#1 occured while writing database")
                 return False
 
         else: 
@@ -1663,7 +1688,7 @@ class ManageRecord():
                     file_handler.write(self.__salt_2)
                     return True
             except IOError:
-                print("write_encrypted_database(): error#04 occured while writing database")
+                print("write_encrypted_database(): error#2 occured while writing database")
                 return False
 
 
@@ -1692,10 +1717,6 @@ class ManageRecord():
             6) IntegrityCheckFailedException() if the calculated
                hash of the encrypted data doesn't match with
                the one stored
-            7) PWDecryptionFailedException() if decryption 
-               of encrypted password (stored in memory)
-               failed due to incorrect key
-                      
         """
 
         ## Debug
@@ -1788,12 +1809,19 @@ class ManageRecord():
             #print("convert_csvlist_to_record(), time taken: %.3fs" % (st6-st5))
             #print("Total time taken: %.3fs" % (st6-st1))
 
+
+            ## This function is good but it has been archived, we dont wanna
+            ##    leak any information in memory
+
+            """
             ## Checking whether we can decrypt pw field
             if (len(self.__record_list) != 0):
                 try:
                     self.get_pw_of_index(0)
                 except (IncorrectPasswordException):
                     raise PWDecryptionFailedException()
+
+            """
 
             return True
 
@@ -1861,10 +1889,6 @@ class ManageRecord():
             6) IntegrityCheckFailedException() if the calculated
                hash of the encrypted data doesn't match with
                the one stored
-            7) PWDecryptionFailedException() if decryption 
-               of encrypted password (stored in memory)
-               failed due to incorrect key
-                      
         """
 
         ## Some of the parameter checks are not required as it is handled
@@ -1951,6 +1975,10 @@ class ManageRecord():
 
             self.convert_csvlist_to_record(data_list, True)
 
+            
+            ## This function is good but it has been archived, we dont wanna
+            ##    leak any information in memory
+            """
             if (len(self.__record_list) != 0):
                 try:
                     self.get_pw_of_index(0)
@@ -1958,6 +1986,7 @@ class ManageRecord():
                     msg = 'load_database_key(): Unable to decrypt encrypted password for a record' + \
                             ' due to corrupted data' 
                     raise PWDecryptionFailedException(msg)
+            """
 
             ## Debug
             #st5 = time()
@@ -2014,9 +2043,11 @@ class ManageRecord():
     # [x] Tested
     def audit_security(self):
 
-        self.audit_record_pw_age()
-        self.audit_record_pw_reuse()
-        self.audit_record_pw_complexity()
+        ## Combining pw_reuse & pw_complexity otherwise we'd run into memory enc errors
+        ##      due to the way this enc library functions
+
+        self.audit_pw_age_all()
+        self.audit_pw_reuse_and_cmp_all()
         self.rate_overall_security()
 
 
@@ -2165,7 +2196,7 @@ class ManageRecord():
 
 
     # [x] Tested
-    def audit_record_pw_age(self):
+    def audit_pw_age_all(self):
 
         """
         Audits records to check if they exceed the desired password age,
@@ -2192,7 +2223,6 @@ class ManageRecord():
                  5) List of record indexes whose password age
                     is >= 1 year and the user would be recommended
                     to change it.
-
         """
 
         lm_not_updated = []
@@ -2201,12 +2231,12 @@ class ManageRecord():
         pw_reset_optional = []
         pw_reset_recommended = []
 
-        dt_now = DateTime.today()
+        day_today = DateTime.today()
 
         days_this_year = 365
         half_year = 181
 
-        if (self.is_year_leap_year(dt_now.year)):
+        if (self.is_year_leap_year(day_today.year)):
             days_this_year = 366
 
         for i in range(len(self.__record_list)):
@@ -2225,15 +2255,15 @@ class ManageRecord():
             yr = int(date.split('-')[2])
 
             hr = int(time.split(':')[0])
-            min = int(time.split(':')[1])
+            minute = int(time.split(':')[1])
 
-            dt_past = DateTime(yr, month, day, hr, min)
+            days_of_past = DateTime(yr, month, day, hr, minute)
 
-            if (dt_past > dt_now):
+            if (days_of_past > day_today):
                 lm_err.append(i)
                 continue
 
-            num_days = (dt_now-dt_past).days
+            num_days = (day_today-days_of_past).days
 
             if (num_days < half_year):
                 pw_reset_not_needed.append(i)
@@ -2256,6 +2286,68 @@ class ManageRecord():
                 pw_reset_recommended
 
 
+    def audit_pw_age_single_record(self, chosen_index=-1):
+
+        """
+        Audits records to check if they exceed the desired password age,
+            & stores audit information within each record
+
+        * If there's any errors, for example last modified is missing,
+            (which probably won't happen) pw_age attribute is set to 'e'
+
+        Returns: None
+
+
+        """
+
+        if (chosen_index == -1):
+            raise InvalidParameterException('audit_pw_age_single_record(): Index parameter cannot be empty')
+
+        day_today = DateTime.today()
+
+        days_this_year = 365
+        half_year = 181
+
+        if (self.is_year_leap_year(day_today.year)):
+            days_this_year = 366
+
+        lm = self.__record_list[chosen_index].get_last_modified()
+
+        if (lm == ''):
+            self.__record_list[i].set_pw_age('e')
+            return
+
+        date = lm.split(' ')[0]
+        time = lm.split(' ')[1]
+
+        day = int(date.split('-')[0])
+        month = int(date.split('-')[1])
+        yr = int(date.split('-')[2])
+
+        hr = int(time.split(':')[0])
+        minute = int(time.split(':')[1])
+
+        days_of_past = DateTime(yr, month, day, hr, minute)
+
+        if (days_of_past > day_today):
+
+            ## 'e' metric is used for errors, usually we won't get this
+            self.__record_list[chosen_index].set_pw_age('e')
+            return 'e'
+
+        num_days = (day_today-days_of_past).days
+
+        if (num_days < half_year):
+            self.__record_list[chosen_index].set_pw_age('n')
+            return 'n'
+        elif (num_days < days_this_year):
+            self.__record_list[chosen_index].set_pw_age('o')
+            return 'o'
+        else:
+            self.__record_list[chosen_index].set_pw_age('r')
+            return 'r'
+
+
     def is_year_leap_year(self, y=0):
 
         if (y <= 0):
@@ -2276,85 +2368,66 @@ class ManageRecord():
 
 
     # [x] Tested
-    def audit_record_pw_reuse(self):
+    def audit_pw_reuse_and_cmp_all(self):
 
         """
-        Audits records to see if any of them reuse the same password 
-            & stores audit information within each record
-    
-        Returns: List of indexes that reuse the same password
-
-        """
-
-        rec_len = len(self.__record_list)
-
-        if (rec_len == 0):
-            return []
-        elif (rec_len == 1):
-            self.__record_list[0].set_pw_reuse('0')
-
-        reuse_pass_recs = []
-
-        for i in range(0, rec_len):
-            
-            if (i in reuse_pass_recs):
-                continue
-
-            _pw1 = self.__record_list[i].get_password()
-
-            match = False
-
-            for j in range(0, rec_len):
-                if (i==0 or j==i or j in reuse_pass_recs):
-                    continue
-
-                _pw2 = self.__record_list[j].get_password()
-
-                if (_pw1 == _pw2):
-                    match = True
-                    reuse_pass_recs.append(j)
-
-            if (match and i not in reuse_pass_recs):
-                reuse_pass_recs.append(i)
-
-        for index in range(0, rec_len):
-
-            if (index not in reuse_pass_recs):
-                self.__record_list[index].set_pw_reuse('0')
-            else:
-                self.__record_list[index].set_pw_reuse('1')
-
-        return reuse_pass_recs
-
-
-    # [x] Tested
-    def audit_record_pw_complexity(self):
-
-        """
-        Audits password complexity of the all records & stores audit information
+        Audits records to see if any of them reuse the same password & the pw complexity
     
         Returns: None
         """
 
-        if (len(self.__record_list) == 0):
-            return
+        rec_len = len(self.__record_list)
 
-        for i in range(len(self.__record_list)):
-            # pw = self.__record_list[i].get_password()
+        ## PW Reuse Calculations
+        if (rec_len == 0):
+            return 
+        elif (rec_len == 1):
+            self.__record_list[0].set_pw_reuse('0')
+        else:
 
-            pw = self.get_pw_of_index(i)
-            result = self.audit_pw_complexity(pw)
+            reuse_pw_indexes_l = []
 
-            if (result == 'u'):
-                self.__record_list[i].set_pw_complexity('u')
-            elif (result == 'w'):
-                self.__record_list[i].set_pw_complexity('w')
-            elif (result == 'a'):
-                self.__record_list[i].set_pw_complexity('a')
-            elif (result == 'g'):
-                self.__record_list[i].set_pw_complexity('g')
-            elif (result == 'e'):
-                self.__record_list[i].set_pw_complexity('e')
+            pw_list = []
+
+            for i in range(rec_len):
+                pw_list.append(self.get_pw_of_index(i))
+
+            for i in range(0, rec_len):
+                
+                if (i in reuse_pw_indexes_l):
+                    continue
+
+                pw1 = pw_list[i]
+
+                match = False
+
+                for j in range(0, rec_len):
+
+                    if (j==i or j in reuse_pw_indexes_l):
+                        continue
+
+                    pw2 = pw_list[j]
+
+                    if (pw1 == pw2):
+                        match = True
+                        reuse_pw_indexes_l.append(j)
+
+                if (match):
+                    reuse_pw_indexes_l.append(i)
+
+            reuse_pw_indexes_l = list(set(reuse_pw_indexes_l))
+
+            for i in range(0, rec_len):
+
+                if (i not in reuse_pw_indexes_l):
+                    self.__record_list[i].set_pw_reuse('0')
+                else:
+                    self.__record_list[i].set_pw_reuse('1')
+
+        ## PW Complexity calculations
+        for i in range(0, rec_len):
+
+            self.__record_list[i].set_pw_complexity(self.audit_pw_complexity(pw_list[i]))
 
 
     # [x] Tested
@@ -2392,7 +2465,6 @@ class ManageRecord():
                            if only (1,2) are met
     
         """
-    
     
         pw_len = len(pw)
     
@@ -2456,7 +2528,6 @@ class ManageRecord():
         if (count_n != 0):
             count_total += 1
 
-
         return count_total
     
     
@@ -2465,9 +2536,6 @@ class ManageRecord():
         """
         Check whether characters belonging to the same class are repeated 
         consecutively in a password
-    
-        e.g: 'asdfghijkl' -> invalid
-             'aSdFgHiJkL' -> valid
     
         Returns: Boolean
     
@@ -2585,7 +2653,6 @@ class AllocateSecureMemory():
 
         for i in range(self.__data_size_virtual):
             sys.stdout.write('%s' % self.__data[i].decode())
-            sys.stdout.flush()
 
 
     def clear_str(self):

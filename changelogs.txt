@@ -1,4 +1,84 @@
 
+    * Other than future bug fixes, UI upgrades, etc. I'll not be making any major changes to pwmgr 2.6.x. 
+
+      Currently also working on Cloudchat project, when its complete, I'll start on Pwmgr PRO version. 
+
+      As I've bills to pay, so it would be nice if I can get paid for my work. Therefore, the PRO version will be paid only. 
+       There will be two versions: PRO and PRO+. PRO will be affordable, where as PRO+ a bit higher priced.
+        PRO will make things more convenient to use, whereas PRO+ will be an upgrade over PRO, with focus on security.
+           By default pwmgr offers an acceptable level of security, so for most people PRO version would be good enough, 
+             but if security is very important for you, PRO+ would be a better choice.
+
+       Code will be distributed along with documentation just like regular pwmgr so you know what to expect. 
+        On top of this, there will be an in depth video series demonstrating key features (live memory forensics), 
+         how to use certain functions, different configuration options, etc. 
+          You can take a look at the features being offered in 'pwmgr_pro_features.txt'
+
+       Unfortunately, I cannot give an accurate estimate of when it'll be ready, but most likely by end of next year.
+
+
+    Version 2.6.1 (06/16/2023)
+    ==========================
+
+        Major Bug fixes:
+        ----------------
+
+            * After the memory wipe upgrade (>= 2.3.x), purpose of some functions changed, 
+                   others got renamed to different ones, so that's the cause for all of these issues listed below:
+
+            [x] PW Audit fn was using encrypted password field instead of real password, 
+                  so that means whatever audit you did in previous versions (>= 2.3.x) was incorrect, now that has been fixed.
+
+            [x]   Surprisingly show summary (-o) function was leaking password information, that also has been fixed
+
+
+        Other improvements:
+        -------------------
+
+            [x] Audit function upgrade (audit)
+
+                     Now it only displays records that have average, weak or critical security rating. 
+
+                        If you would like to see audit of all records, you can pass 'show-all' as the 2nd parameter. 
+                          
+                        Also please note that audit function doesn't have memory wipe feature at this time, 
+                           therefore use it sparingly, only when you need it.
+
+
+            [x] Show function upgrade
+
+                   [x] Theme#66
+
+                       [x] Now the PW field only displays color codes based on password complexity, instead of security rating. 
+                              Security ratings can change due to password being reused, last modified timestamp, etc therefore we do not
+                               want to display inaccurate information 
+                            
+                       [x] Last modified fields values are now calculated dynamically, therefore more accurate than previous versions
+
+                       [x] Show index function (-o) now supports Theme#66 & color coded audit attributes
+
+                       
+                   [x]  Terminal echo has been disabled, therefore, no accidental keypresses will be displayed on screen for show function (-O)
+
+                   [x]   Align text in center (vertically) when using show function (-O)
+
+
+            [x] Font stuff
+
+                [x] Config restrictions related to font type (for searchbar) have been removed
+
+                [x] '--search-font' function
+
+                    * Even if the right fonts are installed, if it's not specified correctly in config, 
+                        it won't get loaded in search bar. Therefore, this function allows you to figure out 
+                            what the font name needs to be.
+
+
+            [x] Edit function upgrade (-e)
+
+                   [x] Indentation issues after a field gets edited, have been fixed
+
+
     Version 2.6.0 (06/05/2023)
     ==========================
 

@@ -2,11 +2,12 @@
 
 import csv, wx, base64
 import subprocess, sys, os
-from random import seed, randint
+import termios, tty, random
 from database_pwmgr import Record, ManageRecord, \
         IncorrectKeyException, IncorrectPasswordException, IntegrityCheckFailedException, \
         AllocateSecureMemory, UnsupportedFileFormatException, SecureClipboardCopyFailedException, \
         MemoryAllocationFailedException, KeyFileInvalidException
+from random import seed, randint
 from getpass import getpass
 from getch import getch
 from time import sleep
@@ -38,21 +39,21 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.6.0'
-__last_updated__ =  '06/05/2023'
+__version__      =  '2.6.1'
+__last_updated__ =  '06/16/2023'
 __license__      =  'GPLv3'
 
 
-global enc_db_handler, app_name, file_name, pw_master, \
-        password_in_keyring, db_file_path, \
-        term_len_h, theme, field_color_fg, term_bar_color, \
-        config, config_file
-# All configs / database is stored under '~/.config/pwmgr/'
+global enc_db_handler, app_name, file_name, password_in_keyring, \
+       pw_master, config, config_file, db_file_path, \
+       theme, field_color_fg, term_bar_color, term_len_h, term_len_v
+####### All configs / database is stored under '~/.config/pwmgr/'
 password_in_keyring=False
 enc_db_handler = None
 file_name = 'db.enc'
 app_name = 'pwmgr'
 term_len_h = 75
+term_len_v = 30
 pw_master = ''
 config = {}
 theme = 1
@@ -61,111 +62,6 @@ db_file_path = ''
 field_color_fg = ''
 term_bar_color = ''
 
-
-"""
-    TODO:
-
-    Version 3.0 (TBD)
-    =================
-
-     [ ] Secure memory wipe upgrade needs to account for the following attribute / processes:
-
-         [ ] Wipe off master key used for the encryption system
-
-         [ ] Auditing function
-
-     [ ] Upgraded audit fn
-
-            [ ] Create an attribute that tracks how many times
-                a record has been used
-
-                [ ] Prioritize more frequently sites to be displayed
-                    first when using audit function
-
-            [ ] Audit function will store all information for future
-                use instead of having to manually calculate it everytime
-
-                [ ] Everytime passwords are updated it'll silently recalculate
-                     the new metrics for the record in the background.
-
-     [ ] Password generation function UI upgrade
-
-         [ ] Fade in / fade out effect on password generator buttons
-               when they are pressed customized for themes
-
-         [ ] Blink / Highlight of generated password
-
-     [ ] When master password is being chosen, show the password
-          strength of the chosen password. Do not allow weak passwords
-          to be set.
-
-     [ ] Switch to pycrypto encryption library
-
-     [ ] Replace PBKDF2 with Scrypt function
-
-
-    Version 3.6 (TBD)
-    =================
-
-     [ ] Upgraded searchbar-copy
-
-         [ ] Set an additional attribute that tracks which is the primary
-             field for a website
-
-         [ ] Set primary attribute for a record when adding it or
-             option to change it by using edit command
-
-         [ ] When you select a record it copies username/email for the
-             site depending on primary field that was set.
-             The software wait a specified interval that can be
-             configured (default 3s), after which it copies the
-             password for that record (makes a background sound to
-             let you know that password has been copied)
-
-         [ ] Sound effects indicating username has been selected
-
-         [ ] Sound effects indicating password has been selected
-
-     [ ] Upgraded searchbar-show
-
-         [ ] When screen is zoomed in or > original size,
-                the color scheme becomes black & white (x-ray effect)
-
-         [ ] In x-ray mode (zoomed in) the audit metrics for a record
-             are applied to the password & last mod field with
-             respective colors
-
-         [ ] Sound effect when a record is selected in search bar
-
-         [ ] Sound effect when a screen goes into x-ray mode
-
-         [ ] Sound effect when a screen goes out of x-ray mode
-
-     [ ] Option to generate hybrid, human memorable passwords based
-         on a combination of dictionary & randomness
-
-         [ ] Provide option to set a master password (using memorable password)
-
-     [ ] Upgraded existing pw audit metrics &
-
-         Tests whether any of your passwords
-           are found in leaked password databases
-           online as part of audit function (additional metric)
-
-         * You can manually add more known pw databases as you like
-
-     [ ] Show usage patterns of sites for the week, month or year
-          in the form of graphs and charts
-
-     [ ] Improve search function by implementing binary search
-
-     [ ] Option to delete a range of fields using '-' symbol
-         along with commas supported values
-         e.g: 'pwmgr -d 1-30'
-
-     [ ] Switch to cloudchat crypto mix ^^ (more details will be provided later)
-
-"""
 
 #===========================================================================
 #                Database polling & argument parsing functions             #
@@ -179,7 +75,7 @@ def parse_args():
 
     """
 
-    global term_len_h, config, theme, field_color_fg, term_bar_color
+    global term_len_h, term_len_v, config, theme, field_color_fg, term_bar_color
 
     argument_length = len(sys.argv)
 
@@ -191,9 +87,10 @@ def parse_args():
     else:
 
         try:
-            term_len_h = os.get_terminal_size()[0]
+            term_len_h, term_len_v = os.get_terminal_size()
         except (OSError):
-            term_len_h = 100
+            term_len_h = 75
+            term_len_v = 75
 
         if (check_if_prog_exists(['keyctl'])[0] == False):
             print(text_error('The program keyctl was not found. It is required to store & manage keys on a system running systemd'))
@@ -237,8 +134,8 @@ def parse_args():
             term_bar_color = '\x1B[1;38;5;45m'
         elif (_theme == 66):
             theme = color_theme_66()
-            field_color_fg = '\x1B[1;38;5;44m'
-            term_bar_color = '\x1B[1;38;5;51m'
+            field_color_fg = '\x1B[1;38;5;87m'
+            term_bar_color = '\x1B[1;38;5;45m'
         else:
             theme = color_theme_1()
             field_color_fg = '\x1B[1;38;5;33m'
@@ -344,13 +241,13 @@ def parse_args():
 
             elif (sys.argv[1] == 'audit' or sys.argv[1] == '--audit'):
 
-                if (term_len_h < 100):
+                if (term_len_h < 50):
                     print(text_error('Screen size too small to display data'))
                     sys.exit(1)
 
                 check_database()
                 exit_if_database_is_empty()
-                audit_records(True)
+                audit_records()
                 sys.exit(0)
 
             elif (sys.argv[1] == 'pw-reset' or sys.argv[1] == '--pw-reset'):
@@ -568,20 +465,15 @@ def parse_args():
                 sys.exit(0)
 
             elif ((sys.argv[1] == 'audit' or sys.argv[1] == '--audit' and \
-                    (sys.argv[2] == 'sort-asc' or sys.argv[2] == 'sort-dsc'))):
+                    (sys.argv[2] == '--show-all' or sys.argv[2] == 'show-all'))):
 
-                if (term_len_h < 100):
+                if (term_len_h < 50):
                     print(text_error('Screen size too small to display data'))
                     sys.exit(1)
 
                 check_database()
                 exit_if_database_is_empty()
-
-                if (sys.argv[2] == 'sort-dsc'):
-                    audit_records(False)
-                else:
-                    audit_records(True)
-
+                audit_records(show_all_ratings=True)
                 sys.exit(0)
 
             elif (sys.argv[1] == 'import' or sys.argv[1] == '--import'):
@@ -632,13 +524,23 @@ def parse_args():
                     print(text_error("Requires a file name"))
                     sys.exit(1)
 
+            elif (sys.argv[1] == 'search-font' or sys.argv[1] == '--search-font'):
+
+                keyword = sys.argv[2].strip()
+
+                if (keyword != ''):
+                    search_font_name(keyword)
+                    sys.exit(0)
+                else:
+                    print(text_error("Keyword cannot be empty"))
+                    sys.exit(1)
+
             else:
                 print(text_error("The selected option doesn't exist"))
                 sys.exit(1)
 
-
         elif (argument_length == 4):
-            
+
             if (sys.argv[1] == 'search' or sys.argv[1] == '--search' or sys.argv[1] == '-s'):
 
                 options = ['group', 'site', 'email', 'username', 'all']
@@ -667,6 +569,7 @@ def parse_args():
                 elif (sys.argv[2] == 'all'):
                     search(keyword)
                     sys.exit(0)
+
 
             elif (sys.argv[1] == 'convert-csv' or sys.argv[1] == '--convert-csv'):
 
@@ -1164,7 +1067,7 @@ def add():
         print_block(1)
 
 
-def audit_records(sort_ascending=True):
+def audit_records(show_all_ratings=False):
 
     """
     Performs security audit on internal database
@@ -1180,7 +1083,7 @@ def audit_records(sort_ascending=True):
 
     global enc_db_handler
 
-    header, data = process_security_data(sort_ascending)
+    header, data = process_security_data(show_all_ratings=show_all_ratings)
 
     print_block(1)
     print(color_menu_column_header(header))
@@ -1195,14 +1098,14 @@ def audit_records(sort_ascending=True):
     print_block(1)
 
 
-def process_security_data(sort_ascending=True):
+def process_security_data(show_all_ratings=False):
 
     global enc_db_handler, db_file_path
 
     enc_db_handler.audit_security()
     enc_db_handler.write_encrypted_database(db_file_path)
 
-    sorted_indexes = enc_db_handler.sort_security_rating(sort_ascending)
+    sorted_indexes = enc_db_handler.sort_security_rating(sort_ascending=True)
 
     header = [['Site',4.2] , ['PW Age',3.4], ['PW Reuse',3], ['    PW Strength',2],  ['Security Rating',1.5]]
 
@@ -1216,13 +1119,16 @@ def process_security_data(sort_ascending=True):
     color_red = color_b('red')
     color_special = '\x1B[1;38;5;51m'
 
-    #print(sorted_indexes)
-
     for i in range(len(sorted_indexes)):
         
         index = sorted_indexes[i]
 
-        r = enc_db_handler.get_index(index)
+        r = enc_db_handler.get_index_with_enc_pw(index)
+
+        if (not show_all_ratings):
+
+            if (not (int(r.get_security_rating()) <= 11)):
+                continue
 
         site = r.get_website()
 
@@ -1350,7 +1256,7 @@ def show_summary(input_list=None):
     if (input_list == None):
 
         for i in range(length):
-            r = enc_db_handler.get_index(i)
+            r = enc_db_handler.get_index_with_enc_pw(i)
             data = [(i+1), r.get_website(), r.get_email(), r.get_username(),  r.get_group()]
             data_summary.append(data)
     else:
@@ -1358,7 +1264,7 @@ def show_summary(input_list=None):
         data_summary = []
 
         for i in range(len(input_list)):
-            r = enc_db_handler.get_index(input_list[i])
+            r = enc_db_handler.get_index_with_enc_pw(input_list[i])
             data = [(input_list[i]+1), r.get_website(), r.get_email(), r.get_username(), r.get_group()]
             data_summary.append(data)
 
@@ -1614,9 +1520,6 @@ def copy_password(index=None):
     if (index == None):
         return
 
-    #r = enc_db_handler.get_index(index)
-    #pwd = r.get_password()
-
     try:
 
         pw = enc_db_handler.get_pw_of_index(index)
@@ -1758,6 +1661,7 @@ def secure_edit_index(index=None):
                 '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
+    cursor_hide()
     custom_refresh(print_menu_bars=False)
     print(color_menu_informational("    Press (e) to Edit | (Enter) to Skip | (q) Quit without saving" + ' '*6))
     print_block(3)
@@ -1774,24 +1678,28 @@ def secure_edit_index(index=None):
         category_name = "{0:<20}".format(category_name)
 
         if (i == 1):
+
             text = '%s%s%s ' % (color,category_name,rst) 
             sys.stdout.write(text)
             sec_mem_handler.print_str()
-        elif (i == 2): ## sec_mem_handler.print_str() fn doesn't print a blank line so we add one
+            sys.stdout.flush()
 
-            print_block(1)
+        elif (i == 2): 
+            
+            if (not pw_changed):
+                print_block(1)
 
             if (data[i] == "''"):
                 print('%s%s%s' % (color,category_name,rst))
             else:
                 print('%s%s%s %s' % (color,category_name,rst,data[i]))
 
-        elif (data[i] == "''"):
-            print('%s%s%s' % (color,category_name,rst))
         else:
-            print('%s%s%s %s' % (color,category_name,rst,data[i]))
 
-        cursor_hide()
+            if (data[i] == "''"):
+                print('%s%s%s' % (color,category_name,rst))
+            else:
+                print('%s%s%s %s' % (color,category_name,rst,data[i]))
 
         try:
 
@@ -1807,7 +1715,7 @@ def secure_edit_index(index=None):
 
                         print_block(1)
 
-                        sec_mem_handler_new = prompt_with_sec_mem("New value:" + ' '*5)
+                        sec_mem_handler_new = prompt_with_sec_mem("           " + ' '*5)
 
                         data_changed = True
                         pw_changed   = True
@@ -1820,12 +1728,14 @@ def secure_edit_index(index=None):
                         cursor_hide()
                         break
                     else:
-                        data[i] = prompt_blank("New value:" + ' '*5)
+                        data[i] = prompt_blank_for_edit("           " + ' '*5)
                         data_changed = True
                         cursor_hide()
                         break
 
-                elif (char == '\n'):
+                elif (char == '\n' ):
+
+                    print_block(1)
                     break
 
                 elif (char in ('q', 'Q')):
@@ -1988,10 +1898,12 @@ def validate_config():
     if (not fn):
         set_default_font()
     else:
-        r = check_if_font_exists(fn)
+        ## Removing font config restriction, do what you want :]
+        # r = check_if_font_exists(fn)
 
-        if (not r):
-            set_default_font()
+        # if (not r):
+        #     set_default_font()
+        pass
 
     try:
 
@@ -2306,6 +2218,26 @@ def prompt(question="", enable_color=True):
     return value.lower()
 
 
+def prompt_for_edit(question="", enable_color=True):
+
+    color = color_b('yellow')
+    rst = color_reset()
+
+    value = ""
+
+    while (value == ""):
+
+        if (enable_color):
+            value = input(color_symbol_prompt() + ' ' + color + question + rst)
+        else:
+            value = input(color_symbol_prompt() + ' ' + text_highlight(question) + rst)
+
+        if (value == ""):
+            print(text_error("Field cannot be blank"))
+
+    return value.lower()
+
+
 def prompt_with_sec_mem(question=""):
 
     sec_mem_handler = AllocateSecureMemory()
@@ -2315,7 +2247,7 @@ def prompt_with_sec_mem(question=""):
 
     while (True):
 
-        sec_mem_handler.add_str_start(input(color_symbol_info() + ' ' + color + text_highlight(question) + rst))
+        sec_mem_handler.add_str_start(input(color_symbol_prompt() + ' ' + color + text_highlight(question) + rst))
 
         sec_mem_handler.lstrip()
 
@@ -2342,6 +2274,20 @@ def prompt_blank(question="", enable_color=True):
         value = input(color_symbol_info() + ' ' + color + question + rst)
     else:
         value = input(color_symbol_info() + ' ' +  text_highlight(question))
+
+    return value
+
+
+def prompt_blank_for_edit(question="", enable_color=True):
+
+    value = ''
+
+    if (enable_color):
+        color = color_b('yellow')
+        rst = color_reset()
+        value = input(color_symbol_prompt() + ' ' + color + question + rst)
+    else:
+        value = input(color_symbol_prompt() + ' ' +  text_highlight(question))
 
     return value
 
@@ -3191,6 +3137,21 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                 '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
+    theme_num = config.get('theme')
+
+    color_not_audited = '\x1B[1;38;5;250m\x1B[1;48;5;232m'
+    color_good = '\x1B[1;38;5;10m\x1B[1;48;5;232m'
+    color_neutral = '\x1B[1;38;5;226m\x1B[1;48;5;232m'
+    color_bad = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
+
+    color_rst = color_reset()
+
+    record = enc_db_handler.get_index_with_enc_pw(index) 
+
+    audit_rating = record.get_pw_complexity()
+
+    last_mod_rating = enc_db_handler.audit_pw_age_single_record(index)
+
     max_length = 0
 
     for i in range(len(data_list)):
@@ -3203,11 +3164,11 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
         h_list = list(' ' * header_width)
 
-        # text_list is the remaining data + space after header field
         text_list = []
 
         field = '%s ' % field_list[i]
         f_list_char = list(field)
+        
         d_list_char = list(data_list[i])
 
         for j in range(len(f_list_char)):
@@ -3238,9 +3199,16 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                 text_list.append(text_l_obj)
                 text_l_obj  = list(' ' * (term_len_h - ((2 * indent) + header_width)))
 
-            text = field_color_fg + indent_text + \
-                    text_highlight(''.join(h_list)) + color_reset() + ''.join(text_list[0]) + \
-                    color_reset()
+            text = ''
+
+            if (theme_num == 66):
+                text = '\x1B[1;38;5;214m' + indent_text + \
+                        text_highlight(''.join(h_list)) + color_rst + \
+                        field_color_fg + ''.join(text_list[0]) + color_rst
+            else:
+                text = field_color_fg + indent_text + \
+                        text_highlight(''.join(h_list)) + color_rst + \
+                        field_color_fg + ''.join(text_list[0]) + color_rst
 
             print(text)
 
@@ -3254,9 +3222,7 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             for line in text_list[1:]:
 
-                text = field_color_fg + indent_text + \
-                        blank_header + color_reset() + ''.join(line) + \
-                        color_reset()
+                text = indent_text + blank_header + field_color_fg + ''.join(line) + color_rst
 
                 print(text)
         else:
@@ -3266,18 +3232,85 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             if (i == 1):
 
-                text = field_color_fg + indent_text + \
-                        text_highlight(''.join(h_list)) + color_reset() 
+                text = ''
+
+                if (theme_num == 66):
+
+                    text = '\x1B[1;38;5;214m' + indent_text + \
+                            text_highlight(''.join(h_list)) + color_rst 
+                else:
+
+                    text = field_color_fg + indent_text + \
+                            text_highlight(''.join(h_list)) + color_rst 
 
                 sys.stdout.write(text)
+                
+                pw_sec_color = ''
+
+                if (theme_num == 66):
+
+                    if (audit_rating == ''):
+                        pw_sec_color = color_not_audited
+                    elif (audit_rating == 'e' or audit_rating == 'g'):
+                        pw_sec_color = color_good
+                    elif (audit_rating == 'a'):
+                        pw_sec_color = color_neutral
+                    else:
+                        pw_sec_color = color_bad
+
+                sys.stdout.write('%s' % pw_sec_color)
                 sec_mem_handler.print_str()
+                sys.stdout.write('%s' % color_rst)
                 print()
+
+            elif (i == 8 and theme_num == 66):
+
+                # pw_age (3): 'n' =  3, 'o' =  2, 'r' = -1
+
+                last_mod_color = ''
+
+                if (last_mod_rating == 'n'):
+                    last_mod_color = color_good
+                elif (last_mod_rating == 'o'):
+                    last_mod_color = color_neutral
+                elif (last_mod_rating == 'r'):
+                    last_mod_color = color_bad
+                else:
+                    last_mod_color = color_not_audited
+
+
+                start_index = len(text_l_obj) - 1
+
+                while (start_index > 0):
+
+                    if (text_l_obj[start_index] == ' '):
+                        pass
+                    else:
+                        text_l_obj[start_index+1] = color_rst
+                        break
+
+                    start_index -= 1
+
+
+                text = '\x1B[1;38;5;214m' + indent_text + text_highlight(''.join(h_list)) + color_rst + \
+                        last_mod_color + ''.join(text_l_obj) 
+
+                print(text)
 
             else:
 
-                text = field_color_fg + indent_text + \
-                        text_highlight(''.join(h_list)) + color_reset() + ''.join(text_l_obj) + \
-                        color_reset()
+                text = ''
+
+                if (theme_num == 66):
+
+                    text = '\x1B[1;38;5;214m' + indent_text + \
+                            text_highlight(''.join(h_list)) + color_rst + \
+                            field_color_fg + ''.join(text_l_obj) + color_rst
+                else:
+
+                    text = field_color_fg + indent_text + \
+                            text_highlight(''.join(h_list)) + color_rst + \
+                            field_color_fg + ''.join(text_l_obj) + color_rst
 
                 print(text)
 
@@ -3286,7 +3319,7 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
 def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
 
-    global config, term_len_h, theme, field_color_fg, enc_db_handler, sec_mem_handler
+    global config, term_len_h, term_len_v, theme, field_color_fg, enc_db_handler, sec_mem_handler
 
     if (len(data_list) == 0 or len(field_list) == 0 or index == None):
         return
@@ -3301,26 +3334,16 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
     color_not_audited = '\x1B[1;38;5;250m\x1B[1;48;5;232m'
     color_good = '\x1B[1;38;5;10m\x1B[1;48;5;232m'
-    color_neutral = '\x1B[1;38;5;11m\x1B[1;48;5;232m'
+    color_neutral = '\x1B[1;38;5;226m\x1B[1;48;5;232m'
     color_bad = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
 
     color_rst = color_reset()
 
     record = enc_db_handler.get_index_with_enc_pw(index) 
 
-    audit_rating = ''
-    last_mod_rating = ''
+    audit_rating = record.get_pw_complexity()
 
-    audit_rating = record.get_security_rating()
-
-    if (audit_rating != ''):
-
-        audit_rating = int(audit_rating)
-        last_mod_rating = record.get_pw_age()
-        # print(last_mod_rating)
-        # print(len(last_mod_rating))
-        # print(type(last_mod_rating))
-        # sys.exit(0)
+    last_mod_rating = enc_db_handler.audit_pw_age_single_record(index)
 
     try:
 
@@ -3343,27 +3366,52 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
     count = 0
 
+    term_settings_original = get_term_settings()
+    unset_term_mode_raw()
+
     try:
 
         while (True):
 
             sleep(0.05)
 
-            term_length_var = os.get_terminal_size()[0]
+            term_length_var_h, term_length_var_v = os.get_terminal_size()
 
-            if (term_length_var == term_len_h and count != 0):
+            if (term_length_var_h == term_len_h and \
+                    term_length_var_v == term_len_v and \
+                    count != 0):
 
                 continue
 
             else:
 
+                if (term_length_var_v < 14):
+
+                    clear_screen()
+                    print_block(1)
+                    print(text_error('Vertical screen size too small to display data'))
+                    sleep(1)
+                    clear_screen()
+                    sleep(0.5)
+                    continue
+
                 count += 1
 
-                term_len_h = term_length_var
+                term_len_h = term_length_var_h
+                term_len_v = term_length_var_v
+
+                num_vert_lines = term_len_v - 14
+                num_lines_top = int(num_vert_lines/2) 
+
+                if ((num_vert_lines % 2) != 0):
+                    num_lines_top = int(num_vert_lines/2) - 1
+
                 clear_screen()
 
-                print_block(1)
+                print_block(num_lines_top)
+
                 print(plain_menu_bars())
+
                 print_block(1)
 
                 max_length = 0
@@ -3378,7 +3426,6 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                     h_list = list(' ' * header_width)
 
-                    # text_list is the remaining data + space after header field
                     text_list = []
 
                     field = '%s ' % field_list[i]
@@ -3386,18 +3433,16 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                     d_list_char = list(data_list[i])
 
                     if (theme_num == 66):
-                        # f_list_char.insert(0, '\x1B[1;48;5;232m')
+
                         f_list_char.insert(0, '\x1B[1;38;5;214m')
 
                         if (f_list_char[-1] == ' '):
-                            f_list_char[-1] = color_reset()
+                            f_list_char[-1] = color_rst
                         else:
-                            f_list_char.append(color_reset())
+                            f_list_char.append(color_rst)
 
                         if (not (i == 1 or i == 8)):
-                            d_list_char.insert(0, '\x1B[1;38;5;87m')
-                            # d_list_char.insert(0, '\x1B[1;38;5;87m\x1B[1;48;5;232m')
-                            # d_list_char.append(color_rst)
+                            d_list_char.insert(0, field_color_fg)
 
                     for j in range(len(f_list_char)):
                         h_list[j] = f_list_char[j]
@@ -3408,6 +3453,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                     if (len(text_l_obj) <= 0):
                         print(text_error('Terminal size too small to display data'))
+                        restore_term_settings(term_settings_original)
                         sys.exit(1)
 
                     if (len(d_list_char) > len(text_l_obj)):
@@ -3428,7 +3474,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                             text_l_obj = list(' ' * (term_len_h - ((2 * indent) + header_width)))
 
                         text = field_color_fg + indent_text + \
-                                text_highlight(''.join(h_list)) + color_reset() + ''.join(text_list[0]) + color_reset()
+                                text_highlight(''.join(h_list)) + color_rst + ''.join(text_list[0]) + color_rst
 
                         print(text)
 
@@ -3443,10 +3489,9 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                         for line in text_list[1:]:
 
                             if (theme_num == 66):
-                                #text_list.insert(1, '\x1B[1;38;5;87m')
-                                text = indent_text + blank_header + '\x1B[1;38;5;87m' + ''.join(line) + color_reset()
+                                text = indent_text + blank_header + field_color_fg + ''.join(line) + color_rst
                             else:
-                                text = field_color_fg + indent_text + blank_header + color_reset() + ''.join(line) + color_reset()
+                                text = field_color_fg + indent_text + blank_header + color_rst + ''.join(line) + color_rst
 
                             print(text)
                     else:
@@ -3458,16 +3503,18 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                             pw_sec_color = ''
 
-                            text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + color_reset()
+                            text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + color_rst
                             sys.stdout.write(text)
 
                             if (theme_num == 66):
 
+                                ## pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
+
                                 if (audit_rating == ''):
                                     pw_sec_color = color_not_audited
-                                elif (audit_rating >= 12):
+                                elif (audit_rating == 'e' or audit_rating == 'g'):
                                     pw_sec_color = color_good
-                                elif (audit_rating >= 10):
+                                elif (audit_rating == 'a'):
                                     pw_sec_color = color_neutral
                                 else:
                                     pw_sec_color = color_bad
@@ -3485,22 +3532,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                             if (i == 8 and theme_num == 66):
 
-                                """
-                                Rates overall security posture of all records in database
-
-                                    Ratings: 
-
-                                    pw_age (3):          'n' =  3, 'o' =  2, 'r' = -1
-                                    pw_reuse (6):        '0' =  6, '1' =  0
-                                    pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
-                                    ___________________________________________________________________________
-                                    Total score (15):    max = 15, min = 0 (negative values are set to 0)
-
-                                """
-
-                                # print('hallo hallo')
-                                # sys.exit(1)
-                                ## pw_age (3): 'n' =  3, 'o' =  2, 'r' = -1
+                                # pw_age (3): 'n' =  3, 'o' =  2, 'r' = -1
 
                                 last_mod_color = ''
 
@@ -3546,8 +3578,16 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
     if (sec_mem_handler != None):
         sec_mem_handler.wipe_memory()
 
+    restore_term_settings(term_settings_original)
     cursor_show()
+    clear_screen()
     sys.exit(0)
+
+
+def color_symbol_prompt():
+
+    text = '  ' + color_b('yellow') + '\u25BA ' + color_reset()
+    return text
 
 
 def color_symbol_info():
@@ -3583,19 +3623,34 @@ def print_header():
 
     txt_color = '\x1B[1;38;5;87m' 
 
+    # header = \
+    # """
+    # ------------------------------------------------------------------
+
+
+    #                        %s%s %s%s%s
+
+
+    # ------------------------------------------------------------------""" \
+    #         % (txt_color, text_highlight(__title__), \
+    #         txt_color, text_highlight(__version__), color_reset())
+
+    lines = '    ' + '\u2501' * 71
+
+    print()
+    print(lines)
+
     header = \
     """
-    ------------------------------------------------------------------
 
+                             %s%s %s%s%s
 
-                           %s%s %s%s%s
-
-
-    ------------------------------------------------------------------""" \
-            % (txt_color, text_highlight(__title__), \
+    """ % (txt_color, text_highlight(__title__), \
             txt_color, text_highlight(__version__), color_reset())
 
     print(text_highlight(header))
+
+    print(lines)
 
 
 def print_help():
@@ -3713,7 +3768,7 @@ def print_help():
          %s  encryption / decryption of database%s
 
 
-    %saudit [sort-asc | sort-dsc]
+    %saudit [show-all]
 
          %sPerforms a security audit on all records & reports 
          %sthe overall security posture. Factors such as password 
@@ -3721,8 +3776,7 @@ def print_help():
          %srecord and password age is used to determine the overall 
          %srisk of using that password
  
-         %s* If sort-asc or sort-dsc is specified, the records are 
-         %s  sorted in ascending or descending order respectively%s
+         %s* If show-all is specified, rating for all records are displayed%s
 
 
     %spw-reset
@@ -3745,22 +3799,9 @@ def print_help():
          %s  the previous password that was set on the keyring%s
 
 
-    %simport pass
-         
-         %sScans for Pass (Unix Password Manager) password store & imports all 
-         %srelevant information. Pass needs to be unlocked & accessible via 
-         %scommandline for this to work,phone_number 
-
-         %s* This feature is experimental, needs more thorough testing%s
-
-
     %sconvert-csv %s[input file] [output file]
     
-         %sConverts an unquoted or single quoted csv file to double quoted format
-
-         %s* Pwmgr only uses double quoted csv format internally, so if you are 
-         %s  importing a csv database from another password manager make sure 
-         %s  that you run this function first before trying to import it%s
+         %sConverts an unquoted or single quoted csv file to double quoted format%s
 
 
     %sselect-cols-csv %s[order of rows] [input file] [output file]
@@ -3794,6 +3835,11 @@ def print_help():
 
          %sExports only 'site,password,username' fields to csv format%s
 
+
+    %ssearch-font %s[keyword]
+
+         %sLists fonts found on your system based on keyword%s
+
     """ % (color_b('orange'), txt_color, color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color,  color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color, \
@@ -3810,14 +3856,14 @@ def print_help():
             color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color, color_reset(), \
             color_b('orange'), txt_color,txt_color,txt_color,txt_color, color_reset(), \
             color_b('orange'), txt_color,txt_color,txt_color, color_reset(), 
-            color_b('orange'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,color_reset(), \
-                    color_b('orange'), txt_color, color_reset(), \
+            color_b('orange'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,color_reset(), \
+            color_b('orange'), txt_color, color_reset(), \
             color_b('orange'), txt_color,txt_color,color_reset(), \
             color_b('orange'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
-            color_b('orange'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color,txt_color,color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
             color_b('orange'), color_b('yellow'), txt_color,color_reset()))
 
@@ -3915,6 +3961,32 @@ def convert_str_to_int(val=None):
             return [False, []]
     else:
         return [False, []]
+
+
+def remove_whitespace(s=''):
+
+    _s = ''
+
+    for i in range(len(s)):
+        if (s[i] != ' '):
+            _s += s[i]
+
+    return _s
+
+
+def remove_whitespace_from_list(l=[], remove_all_whitespace=False):
+
+    _l = []
+
+    for item in l:
+
+        if (remove_all_whitespace):
+            _l.append(remove_whitespace(item))
+
+        else:
+            _l.append(item.strip())
+
+    return _l
 
 
 def clear_screen():
@@ -4453,7 +4525,7 @@ def menu_generate_password():
 
     global term_len_h
 
-    term_length_var = term_len_h
+    term_length_var_h = term_len_h
 
     color = color_b('yellow')
     rst = color_reset()
@@ -4477,11 +4549,11 @@ def menu_generate_password():
             output = detect_screen_res_change()
 
             if (output[0]):
-                term_length_var = output[1]
+                term_length_var_h = output[1]
 
             custom_refresh(1,0)
-            print(color_menu_bars_dynamic(' ', term_length_var))
-            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
             print_block(5)
 
             print(color_symbol_info() + \
@@ -4491,9 +4563,9 @@ def menu_generate_password():
 
             menu_text = "(G) Generate password | (S) Select | (Q) Quit"
 
-            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
             print(color_menu_text(menu_text))
-            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
 
             while (True):
                 char = getch()
@@ -4530,7 +4602,7 @@ def menu_generate_password_standalone():
 
     global term_len_h
 
-    term_length_var = term_len_h
+    term_length_var_h = term_len_h
 
     color = color_b('yellow')
     rst = color_reset()
@@ -4559,11 +4631,11 @@ def menu_generate_password_standalone():
             output = detect_screen_res_change()
 
             if (output[0]):
-                term_length_var = output[1]
+                term_length_var_h = output[1]
 
             custom_refresh(1,0)
-            print(color_menu_bars_dynamic(' ', term_length_var))
-            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
             print_block(5)
 
             print(color_symbol_info() + \
@@ -4573,9 +4645,9 @@ def menu_generate_password_standalone():
 
             menu_text = "(G) Generate password | (Q) Quit"
 
-            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
             print(color_menu_text(menu_text))
-            print(color_menu_bars_dynamic(' ', term_length_var))
+            print(color_menu_bars_dynamic(' ', term_length_var_h))
 
             while (True):
 
@@ -4602,10 +4674,10 @@ def detect_screen_res_change():
 
     try:
 
-        term_length_var = os.get_terminal_size()[0]
+        term_length_var_h = os.get_terminal_size()[0]
 
-        if (term_length_var != term_len_h):
-            term_len_h = term_length_var
+        if (term_length_var_h != term_len_h):
+            term_len_h = term_length_var_h
             clear_screen() 
             return True, term_len_h
         else:
@@ -4614,6 +4686,20 @@ def detect_screen_res_change():
     except (OSError):
         return False, term_len_h
 
+
+def get_term_settings():
+
+    return termios.tcgetattr(0)
+
+
+def unset_term_mode_raw():
+
+    tty.setcbreak(0)
+
+
+def restore_term_settings(original_attrs=''):
+
+    termios.tcsetattr(0, termios.TCSADRAIN, original_attrs)
 
 
 def generate_keyfile(file_path='', confirm=True, debug=True):
@@ -5084,6 +5170,39 @@ def export_to_csv(file_name, brief=False):
     print_block(1)
     print(text_debug('Exported database to file: %s' % file_name))
     print_block(1)
+
+
+def search_font_name(keyword=''):
+
+    global field_color_fg
+
+    cmd = "fc-list | grep -i '%s' | cut -d':' -f2" % (keyword)
+
+    stdout,stderr,rc = run_cmd(cmd)
+
+    if (stdout == ''):
+        print(text_error('Nothing found'))
+    else:
+
+        color = color_b('yellow')
+        rst   = color_reset()
+
+        font_l = list(set(remove_whitespace_from_list(stdout.split('\n'))))
+
+        font_l.sort()
+
+        count = 1
+
+        print_block(1)
+
+        print(text_debug('The following fonts are installed in system: \n'))
+
+        for f in font_l:
+
+            print("      %s%s)%s %s" % (color, count, rst, f))
+            count += 1
+
+        print_block(1)
 
 
 def read_csv_pwmgr(filename=''):
