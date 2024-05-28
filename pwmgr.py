@@ -2135,17 +2135,9 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             print(text)
 
-            blank_header = h_list
-
-            for crab_c in range(len(blank_header)):
-
-                blank_header[crab_c] = ' '
-
-            blank_header = ''.join(blank_header)
-
             for line in text_list[1:]:
 
-                text = indent_text + blank_header + ''.join(line) + color_rst
+                text = indent_text + ' ' * len(h_list) + ''.join(line) + color_rst
 
                 print(text)
         else:
@@ -2416,21 +2408,12 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                         print(text)
 
-                        blank_header = h_list
-
-                        for crab_c in range(len(blank_header)):
-
-                            blank_header[crab_c] = ' '
-
-                        blank_header = ''.join(blank_header)
-
                         for line in text_list[1:]:
 
                             if (theme_num == 66):
-                                # text = indent_text + blank_header + field_color_fg + ''.join(line) + color_rst
-                                text = indent_text + blank_header  + ''.join(line) + color_rst
+                                text = indent_text + ' ' * len(h_list)  + ''.join(line) + color_rst
                             else:
-                                text = field_color_fg + indent_text + blank_header + color_rst + ''.join(line) + color_rst
+                                text = field_color_fg + indent_text + ' ' * len(h_list) + color_rst + ''.join(line) + color_rst
 
                             print(text)
                     else:
