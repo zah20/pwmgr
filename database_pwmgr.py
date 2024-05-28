@@ -9,7 +9,7 @@ import sys, os, csv
 import base64, math
 
 
-global __app, __author, __updated__, __version__
+global __app, __author, __last_updated__, __current_revision__
 
 __app__              = 'Database @PWMGR'
 __author__           = 'Zubair Hossain'

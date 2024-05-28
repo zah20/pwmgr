@@ -16,7 +16,7 @@ from  database_pwmgr import \
  UnsupportedFileFormatException,NoKeyFoundException,DataCorruptedException
 
 
-global __app, __author, __updated__, __version__
+global __app, __author, __updated__, __current_revision__
 
 __app__              = 'Password Manager'
 __author__           = 'Zubair Hossain'
@@ -4512,7 +4512,7 @@ def prompt_password_master_gui():
 
 def print_header():
 
-    global __app__, __version__
+    global __app__, __current_revision__
 
     txt_color = '\x1B[1;38;5;87m' 
 
@@ -4525,7 +4525,7 @@ def print_header():
     """
                              %s%s %s%s%s
     """ % (txt_color, text_highlight(__app__), \
-            txt_color, text_highlight(__version__), color_reset())
+            txt_color, text_highlight(__current_revision__), color_reset())
 
     print(text_highlight(header))
 
