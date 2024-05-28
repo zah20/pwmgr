@@ -3,68 +3,65 @@
     ┃                     Version 3.0.0 (07/17/2024)                     ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-      * This is version is still undergoing testing, so it is advisable
-        to prefer install 2.3.x from the download section at this time
+      * This is version is still undergoing testing, so if you run into 
+         any major bugs, feel free to use v2.6.1 from the releases section 
+
 
                           Bug Fixes & Optimization
                           ━━━━━━━━━━━━━━━━━━━━━━━━
 
     [x] Fixed a critical bug related to libc path detection (for memory wipe functionality),
-             which was not working properly under Ubuntu Linux
+          which was not working properly under Ubuntu Linux
 
     [x] Fixed a bug related to duplicate namespace usage when a module is
-          imported under a different name while default name is still present
-          (datetime module @ database_pwmgr)
+             imported under a different name while default name is still present
+                 (datetime module @ database_pwmgr)
 
           * This is allowed in Python, but is not a good practice &
                 could be prone to future errors
 
-    [x] Help text has been updated for better readability, some of the commands have
-            undergone some changes. Please check it out for more information.
+    [x] Help text has been updated, some of the commands have undergone changes. 
+           Please check it out for more information.
+
 
                                New Features
                                ━━━━━━━━━━━━
 
-    [x] User interface upgrades
+    [x] User Interface Upgrades:
 
-        [x] Upgraded the interface so that yes/no styled questions are reduced 
-             to a single keystroke
+         [x] Upgraded the interface so that yes/no styled questions are reduced to a single keystroke
 
-        [x] PW generation UI has been upgraded with auto resizing when buttons are pressed
+         [x] Pw generation UI has been upgraded with auto resizing when buttons are pressed
 
-        [x] Add, Edit, reset-pw, etc. interfaces have undergone some minor changes
+         [x] Common functions such as add, edit, reset-pw, etc. interfaces have undergone some minor changes
 
-        [x] -O, -o now displays pw complexity without having to run audit function
-
+         [x] Show commands now display pw complexity without having to run audit function
 
     [x] Security Upgrades:
 
-        [x] TPM key scrambling has been implemented using a temporary key.
+         [x] Now offers mitigations to counter buffer overflow exploits in file formats
 
-             * We have tpm key expiration, but we don't want anyone to be able to directly grab key out of tpm.
+         [x] Audit metrics upgrade
 
-        [x] Keyfile generation upgrade
+                  PW complexity has been updated to provide more accurate prediction,
+                    one that aligns with real world scenarios
 
-              * Coded from scratch using native Python instead of relying on dd utility.
+                    *  The default is set to 15+ for excellent and 21+ for superb.
+                          It now uses a more fine tuned, non linear grid, which is much more 
+                             accurate and penalizes bad passwords more.
 
-        [x] Now offers mitigations to counter buffer overflow exploits in file formats
+                      PW age auditing metrics have been updated so that it has more effect on high ratings 
+                           if they have not been changed in a long time
 
-        [x] PW Generation algorithm has been upgraded. Now we generate passwords that actually
-              look random & there's a lot of variations so you don't get bored
+         [x] TPM key scrambling has been implemented using a temporary key.
 
-    [x] Audit metrics upgrade
+                * We have tpm key expiration, but we don't want anyone to be able to directly grab key out of tpm and use it
 
-        [x] PW complexity metrics has been updated to provide more accurate prediction,
-              one that aligns with real world scenarios
+         [x] Keyfile generation upgrade
 
-              * The default is set to 15+ for excellent and 21+ for superb.
-                It now uses a more fine tuned, non linear grid, which penalizes bad passwords more.
+                    * Coded from scratch using native Python instead of relying on dd utility.
 
-        [x] PW age range has been increased so that it has more effect on high ratings
-              if they have not been changed in long time as opposed to
-                only penalizing with a fixed value
-
-    [x] Database upgrade
+    [x] Database Upgrade:
 
           [x] File format has been updated and it is no longer compatible with previous versions (< 3.0). 
 
@@ -82,11 +79,11 @@
                not been thoroughly tested yet, so there maybe some bugs. Take a
                  look at the documentation section on how to install manually.
 
-        [x] This setup script has built in hashing mechanism, to determine whether
-                integrity of any of the modules have been compromised
+         [x] This setup script has built in hashing mechanism, to determine whether
+                 integrity of any of the modules have been compromised
 
-            * From now on, every release will have it's own set of hashes 
-                  which you can manually verify
+             * From now on, every release will have it's own set of hashes 
+                   which you can manually verify
 
 
     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
