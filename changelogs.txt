@@ -1,24 +1,97 @@
 
-    * Other than future bug fixes, UI upgrades, etc. I'll not be making any major changes to pwmgr 2.6.x. 
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                     Version 3.0.0 (07/17/2024)                     ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-      Currently also working on Cloudchat project, when its complete, I'll start on Pwmgr PRO version. 
+      * This is version is still undergoing testing, so it is advisable
+        to prefer install 2.3.x from the download section at this time
 
-      As I've bills to pay, so it would be nice if I can get paid for my work. Therefore, the PRO version will be paid only. 
-       There will be two versions: PRO and PRO+. PRO will be affordable, where as PRO+ a bit higher priced.
-        PRO will make things more convenient to use, whereas PRO+ will be an upgrade over PRO, with focus on security.
-           By default pwmgr offers an acceptable level of security, so for most people PRO version would be good enough, 
-             but if security is very important for you, PRO+ would be a better choice.
+                          Bug Fixes & Optimization
+                          ━━━━━━━━━━━━━━━━━━━━━━━━
 
-       Code will be distributed along with documentation just like regular pwmgr so you know what to expect. 
-        On top of this, there will be an in depth video series demonstrating key features (live memory forensics), 
-         how to use certain functions, different configuration options, etc. 
-          You can take a look at the features being offered in 'pwmgr_pro_features.txt'
+    [x] Fixed a critical bug related to libc path detection (for memory wipe functionality),
+             which was not working properly under Ubuntu Linux
 
-       Unfortunately, I cannot give an accurate estimate of when it'll be ready, but most likely by end of next year.
+    [x] Fixed a bug related to duplicate namespace usage when a module is
+          imported under a different name while default name is still present
+          (datetime module @ database_pwmgr)
+
+          * This is allowed in Python, but is not a good practice &
+                could be prone to future errors
+
+    [x] Help text has been updated for better readability, some of the commands have
+            undergone some changes. Please check it out for more information.
+
+                               New Features
+                               ━━━━━━━━━━━━
+
+    [x] User interface upgrades
+
+        [x] Upgraded the interface so that yes/no styled questions are reduced 
+             to a single keystroke
+
+        [x] PW generation UI has been upgraded with auto resizing when buttons are pressed
+
+        [x] Add, Edit, reset-pw, etc. interfaces have undergone some minor changes
+
+        [x] -O, -o now displays pw complexity without having to run audit function
 
 
-    Version 2.6.1 (06/16/2023)
-    ==========================
+    [x] Security Upgrades:
+
+        [x] TPM key scrambling has been implemented using a temporary key.
+
+             * We have tpm key expiration, but we don't want anyone to be able to directly grab key out of tpm.
+
+        [x] Keyfile generation upgrade
+
+              * Coded from scratch using native Python instead of relying on dd utility.
+
+        [x] Now offers mitigations to counter buffer overflow exploits in file formats
+
+        [x] PW Generation algorithm has been upgraded. Now we generate passwords that actually
+              look random & there's a lot of variations so you don't get bored
+
+    [x] Audit metrics upgrade
+
+        [x] PW complexity metrics has been updated to provide more accurate prediction,
+              one that aligns with real world scenarios
+
+              * The default is set to 15+ for excellent and 21+ for superb.
+                It now uses a more fine tuned, non linear grid, which penalizes bad passwords more.
+
+        [x] PW age range has been increased so that it has more effect on high ratings
+              if they have not been changed in long time as opposed to
+                only penalizing with a fixed value
+
+    [x] Database upgrade
+
+          [x] File format has been updated and it is no longer compatible with previous versions (< 3.0). 
+
+              * Therefore it is recommended to re import your old database using import-csv function.
+
+          [x] load_database() and load_database_key() functions have been merged,
+               and all of them including write_encrypted_database() has been
+               completely rewritten from scratch reducing code complexity,
+                as well as code size by roughly 200-300 lines of code
+
+    [x] Added an automatic installation script for Ubuntu, Arch Linux & Manjaro distributions
+
+          * If you're using any of the supported distributions, just cloning the project &
+              running the setup script should be enough. Please note that it has
+               not been thoroughly tested yet, so there maybe some bugs. Take a
+                 look at the documentation section on how to install manually.
+
+        [x] This setup script has built in hashing mechanism, to determine whether
+                integrity of any of the modules have been compromised
+
+            * From now on, every release will have it's own set of hashes 
+                  which you can manually verify
+
+
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                      Version 2.6.1 (06/16/2023)                    ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
         Major Bug fixes:
         ----------------
@@ -79,8 +152,9 @@
                    [x] Indentation issues after a field gets edited, have been fixed
 
 
-    Version 2.6.0 (06/05/2023)
-    ==========================
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                      Version 2.6.0 (06/05/2023)                    ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
     [x] 1 new theme (theme#66)
 
@@ -99,15 +173,9 @@
     [x] Removed unnecessary exception handling code for memory wipe
 
 
-    Version 2.4.1 (06/03/2023)
-    ==========================
-
-    [x] Fixed add fn with duplicate entry code fault. I worked on this long time
-        ago, but I didn't realize that apt's messed it up down the line.
-
-
-    Version 2.4.0 (05/29/2023)
-    ==========================
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                      Version 2.4.0 (05/29/2023)                    ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
      [x] Code audits were made through open source static code analysis software
          such as prospector, pylint, etc. as a result a lot of unused variables, 
@@ -122,72 +190,70 @@
      [x] Removed database migration options from 'pass unix pwmgr' as we have import-csv function
 
 
-    Version 2.3.0 (04/26/2023)
-    ==========================
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                      Version 2.3.0 (04/26/2023)                    ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
     
-    [x] Secure memory wipe upgrade (need to install glibc package, checkout installation section in guide)
+     [x] Secure memory wipe upgrade (need to install glibc package, checkout installation section in guide)
 
-         * When copying password to clipboard or displaying a record, that was the only 
-            scenario where we decrypted password in memory. It was not possible to 
-            overwrite memory section in python as it doesn't allow direct memory access. 
+          * When copying password to clipboard or displaying a record, that was the only 
+             scenario where we decrypted password in memory. It was not possible to 
+             overwrite memory section in python as it doesn't allow direct memory access. 
 
-             Now we have designed a custom class which interfaces with c at a lower level allowing us to 
-             securely wipe off memory, therefore reducing potential attack surface. This upgrade ensures 
-             that no passwords are leaked through memory by any means when the following functions are called:
+              Now we have designed a custom class which interfaces with c at a lower level allowing us to 
+              securely wipe off memory, therefore reducing potential attack surface. This upgrade ensures 
+              that no passwords are leaked through memory by any means when the following functions are called:
 
-                  [x] Copying password to clipboard (-c, -C)
+                   [x] Copying password to clipboard (-c, -C)
 
-                  [x] Displaying passwords for one more records (-o, -O)
+                   [x] Displaying passwords for one more records (-o, -O)
 
-    [x] Theme upgrades
+     [x] Theme upgrades
 
-          * Now every theme has a bolder color for the show function (-o, -O),
-             this improves the overall contrast, therefore increasing readability
-
-
-    Version 2.1.1 (03/01/2023)
-    ==========================
-
-    [x] Copy to clipboard function still had issues with quoted text, it has been fixed. 
+           * Now every theme has a bolder color for the show function (-o, -O),
+              this improves the overall contrast, therefore increasing readability
 
 
-    Version 2.1.0 (02/26/2023)
-    ==========================
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                      Version 2.1.1 (03/01/2023)                    ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-    [x] Upgrade help text
+     [x] Copy to clipboard function still had issues with quoted text, it has been fixed. 
 
-    [x] Upgrade import-csv function with more options
+     [x] Upgrade help text
 
-             - Site, PW
-             - Site, PW, Username, Email
-             - Site, PW, Username, Email, Notes
+     [x] Upgrade import-csv function with more options
 
-    [x] Automatic text adjustment due to screen resizing when using:
+              - Site, PW
+              - Site, PW, Username, Email
+              - Site, PW, Username, Email, Notes
 
-        [x] Show command '-O'
-        [x] Password generator function standalone
-        [x] Password generator function in add function
+     [x] Automatic text adjustment due to screen resizing when using:
 
-    [x] Show index function should be upgraded so that 
-        when displaying headers it matches the theme instead of all yellow :/
+         [x] Show command '-O'
+         [x] Password generator function standalone
+         [x] Password generator function in add function
 
-        [x] Field header should have foreground color of the theme 
+     [x] Show index function should be upgraded so that 
+         when displaying headers it matches the theme instead of all yellow :/
 
-        [x] Remove borders in show index function with thin lines of '-',
-             makes it look cleaner
+         [x] Field header should have foreground color of the theme 
 
-    [x] Fix all known bugs 
+         [x] Remove borders in show index function with thin lines of '-',
+              makes it look cleaner
 
-        [x] Searching using -O & if chosen value doesn't exist it needs
-             to quit with an exit status of 1 (catch ValueError) 
+     [x] Fix all known bugs 
 
-        [x] Show index function needs to be upgraded so that they can
+         [x] Searching using -O & if chosen value doesn't exist it needs
+              to quit with an exit status of 1 (catch ValueError) 
 
-             [x] Display characters 100+
-             [x] Have dynamic resizing of multiline text
+         [x] Show index function needs to be upgraded so that they can
 
-        [x] Have the ability to use quotations as part of password field
-             For this to work copy to clipboard function needs to have 
-             proper escape characters
+              [x] Display characters 100+
+              [x] Have dynamic resizing of multiline text
+
+         [x] Have the ability to use quotations as part of password field
+              For this to work copy to clipboard function needs to have 
+              proper escape characters
 
 
