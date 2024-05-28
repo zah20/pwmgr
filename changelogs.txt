@@ -1,6 +1,6 @@
 
     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-    ┃                     Version 3.0.0 (07/17/2024)                     ┃
+    ┃                     Version 3.0.1 (07/24/2024)                     ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
      * This version is still undergoing testing, so if you run into 
@@ -24,19 +24,14 @@
            Please check it out for more information.
 
 
+    [x] load_database() and load_database_key() functions have been merged,
+           and all of them including write_encrypted_database() has been
+           completely rewritten from scratch reducing code complexity,
+           as well as code size by roughly 200-300 lines of code
+
+
                                New Features
                                ━━━━━━━━━━━━
-
-    [x] Database Upgrade:
-
-          [x] File format has been updated and it is no longer compatible with previous versions (< 3.0). 
-
-              * Therefore it is recommended to re import your old database using import function.
-
-          [x] load_database() and load_database_key() functions have been merged,
-               and all of them including write_encrypted_database() has been
-               completely rewritten from scratch reducing code complexity,
-                as well as code size by roughly 200-300 lines of code
 
     [x] User Interface Upgrades:
 
@@ -69,7 +64,7 @@
                 * We have tpm key expiration, but we don't want anyone to be able to directly grab key out of tpm and use it
 
          [x] File format has been upgraded. Now it properly handles errors,
-	 	 therefore reducing attack surface from local exploits
+	 	      therefore reducing attack surface from local exploits
 
     [x] Added an automatic installation script for Ubuntu, Arch Linux & Manjaro distributions
 
