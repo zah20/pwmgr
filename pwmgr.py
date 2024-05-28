@@ -18,10 +18,10 @@ from  database_pwmgr import \
 
 global __app, __author, __updated__, __version__
 
-__app__           =  'Password Manager'
-__author__        =  'Zubair Hossain'
-__updated__       =  '07/24/2024'
-__version__       =  '3.0.1'
+__app__              = 'Password Manager'
+__author__           = 'Zubair Hossain'
+__last_updated__     = '07/24/2024'
+__current_revision__ = '3.0.1'
 
 
 #$$$$━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$
@@ -3910,18 +3910,18 @@ def check_database():
 
                 gui_msg("\n\n  Unfortunately PWMGR no longer supports this file format\n\n" + \
                         "  Go through the following steps to fix the problem:\n\n" + \
-                        "    1.  Export database using '--export-csv data.csv' on pwmgr 2.6 or earlier\n" + \
+                        "    1.  Export database using 'export-csv data.csv' on pwmgr 2.6 or earlier\n" + \
                         "    2.  Remove current installation: 'rm -rf ~/.config/pwmgr/'\n" + \
-                        "    3.  Run '--import data.csv' on latest version of pwmgr >= 3.0\n\n" + \
+                        "    3.  Run 'import data.csv' on latest version of pwmgr >= 3.0\n\n" + \
                         "  * Releases section of the github page lists downloadable versions\n")
             else:
 
                 print(text_error("Unfortunately PWMGR no longer supports this file format"))
 
                 msg =  "  Go through the following steps to fix the problem:\n\n" + color_b('yellow') + \
-                       "    1.  Export database using '--export data.csv' on pwmgr 2.6 or earlier\n" + \
+                       "    1.  Export database using 'export data.csv' on pwmgr 2.6 or earlier\n" + \
                        "    2.  Remove current installation: 'rm -rf ~/.config/pwmgr/'\n" + \
-                       "    3.  Run '--import data.csv' on latest version of pwmgr >= 3.0\n\n" + color_reset() + \
+                       "    3.  Run 'import data.csv' on latest version of pwmgr >= 3.0\n\n" + color_reset() + \
                        "  * Releases section of the github page lists downloadable versions\n" 
 
                 print(msg)

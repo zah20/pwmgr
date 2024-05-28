@@ -4,24 +4,23 @@ from time import sleep
 from hashlib import sha256
 import math, os, sys, subprocess, random
 from threading import Thread
-from getch import getch
 
 global app_name, dist_pkg_l_ubuntu, dist_pkg_l_arch, \
        pip_pkg_l, installation_files
 
 '''
-    Auto Installer script for apps,
-    supports distro based packages & 
-    third party python libraries
+Auto Installer script for apps,
+supports distro based packages & 
+third party python libraries
+
+* Needs more testing, please install packages manually
+  if you run into any major issues
 '''
 
-__title__        =  'Password Manager'
-__author__       =  'Zubair Hossain'
-__email__        =  'zhossain@protonmail.com'
-__version__      =  '3.0.0'
-__last_updated__ =  '07/17/2024'
-__license__      =  'GPLv3'
-
+__app__              = 'Password Manager'
+__author__           = 'Zubair Hossain'
+__last_updated__     = '07/24/2024'
+__current_revision__ = '3.0.1'
 
 app_name           = 'PWMGR'
 dist_pkg_l_ubuntu  = 'git dmenu xclip wxpython-tools keyutils python3-pip libc6 fonts-fantasque-sans'
@@ -307,45 +306,26 @@ def prompt(question="", allow_blank_response=False, \
     return value
 
 
-def prompt_yes_no_instant(question="", default=True, \
-                          quit_if_keyboard_interrupt=True):
+def prompt_yes_no(question="", default=True):
+
     """
     Asks yes/no & returns a boolean value.
     """
 
-    q =  color_symbol_info() + ' ' + '\x1B[1;38;5;221m' + question + color_reset() 
-        
-    choice = ''
+    choice_list = ['da', 'y', 'yes', 'n', 'no', 'niet']
 
-    try:
+    while (True):
+        choice = input(color_symbol_info() + ' ' + color_b('yellow') + question + color_reset())
 
-        while (True):
-
-            sys.stdout.write(q)
-            sys.stdout.flush()
-
-            choice = getch()
-
-            print()
-
-            if (choice == '\n'):
-                return default
-            elif (choice == 'y'):
+        if (choice in choice_list):
+            if (choice in choice_list[:4]):
                 return True
-            elif (choice == 'n'):
-                return False
             else:
-                print(text_error("Invalid answer.  Please type 'y/n'") + '\n')
-
-    except KeyboardInterrupt:
-
-        if (quit_if_keyboard_interrupt):
-            clear_screen()
-            sys.exit()
-
+                return False
+        elif (choice == ''):
+            return default
         else:
-            msg = 'prompt_yes_no_instant(): keyboard interrupt requested'
-            raise KeyboardInterrupt(msg)
+            print(text_error("Invalid answer.  Please answer 'yes/no'"))
 
 
 '''
@@ -379,6 +359,7 @@ def color_symbol_debug():
 
     text = '  ' + color_b('yellow') + '[*]' + color_reset()
     return text
+
 
 def color_symbol_prompt():
     text = '  ' + '\x1B[1;38;5;51m' + '[>]' + color_reset()
@@ -720,7 +701,7 @@ def validate_integrity_of_code(fp=''):
 
         print(text_debug('No hash database found'))
 
-        if (not prompt_yes_no_instant('Do you wish to continue? (Y/n)    ', \
+        if (not prompt_yes_no('Do you wish to continue? (Y/n)    ', \
                                quit_if_keyboard_interrupt=True)):
             print()
             sys.exit(0)
@@ -766,7 +747,7 @@ def validate_integrity_of_code(fp=''):
             print(text_error('The following files are listed in database, but do not exist') + '\n')
             print_file_list(f_not_found)
             
-            if (not prompt_yes_no_instant('Do you wish to continue? (Y/n)    ', \
+            if (not prompt_yes_no('Do you wish to continue? (Y/n)    ', \
                                              quit_if_keyboard_interrupt=True)):
                 print()
                 cursor_show()
@@ -895,7 +876,7 @@ def main():
                 print(text_info('The following system packages will be installed: \n'))
                 print('\t\t' + color_orange + dist_pkg_l_ubuntu + color_rst + '\n\n')
 
-            if (not prompt_yes_no_instant('Do you wish to continue? (Y/n)    ', \
+            if (not prompt_yes_no('Do you wish to continue? (Y/n)    ', \
                                    quit_if_keyboard_interrupt=True)):
                 print()
                 cursor_show()
@@ -970,7 +951,7 @@ def main():
                 print(text_info('The following python packages will be installed: \n'))
                 print('\t' + color_orange + pip_pkg_l + color_rst + '\n\n')
 
-            if (prompt_yes_no_instant('Do you wish to continue? (Y/n)    ', \
+            if (prompt_yes_no('Do you wish to continue? (Y/n)    ', \
                                quit_if_keyboard_interrupt=True) == False):
                 print()
                 cursor_show()
