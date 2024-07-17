@@ -9,7 +9,9 @@ The commandline password manager that everyone wants :]
 
 [Video Tutorial](https://www.dropbox.com/s/e81sbk9qaur742l/pwmgr_test.mp4?dl=0)
 
+</br>
+</br>
 
-** Need update (v3.0) has been released. It is no longer compatible with
-previous version, so please import your old database in csv format. 
-Don't forget to read the help text **
+** New update (v3.0) has been released. It is no longer compatible with
+previous version, so please import your old database via csv before using.
+Also, don't forget to read the help text **
