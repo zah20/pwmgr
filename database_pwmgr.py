@@ -1,19 +1,18 @@
 #!/usr/bin/python3
-from cryptography.hazmat.primitives import hashes
-from math import ceil as math_ceil
+from datetime import datetime
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet, InvalidToken
-from datetime import datetime as DateTime
+from cryptography.hazmat.primitives import hashes
 from hashlib import sha256
-import csv, ctypes
-import sys, os
-import base64
+import subprocess, ctypes
+import sys, os, csv
+import base64, math
 
 
 """
 Database used by Password Manager
 
-Copyright © 2023 Zubair Hossain
+Copyright © 2024 Zubair Hossain
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,9 +35,32 @@ global __title__, __author__, __email__, __version__, __last_updated__, __licens
 __title__        =  'Password Manager'
 __author__       =  'Zubair Hossain'
 __email__        =  'zhossain@protonmail.com'
-__version__      =  '2.6.1'
-__last_updated__ =  '06/16/2023'
+__version__      =  '3.0'
+__last_updated__ =  '07/17/2024'
 __license__      =  'GPLv3'
+
+
+"""
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃             Code Index             ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+       Section name                Line#
+
+       Record Class                   74
+       ManageRecord                  395
+
+       Database Encryption Mgmt      402
+       Database RW                   701
+       Database Password Auditing    936
+       Database Miscellaneous       1470
+       Database Export              1981
+
+       Security Functions           2203
+
+       Utility                      2451
+
+"""
 
 
 class Record():
@@ -46,44 +68,46 @@ class Record():
     def __init__(self, website='', password='', last_modified=''):
 
         """
+                                Audit Attributes
 
-        --audit attributes:
+        pw_age (default: null, str) Determines if a pw change is required
 
-            pw_age (default: null, str) Determines if a pw change is required
-                (values: null = unset, 'n' = not needed, 'o' = optional, 'r' = required)
+        pw_reuse (default: null, str) Checks whether pw has been reused in another record
+            (values: null=unset, '1'=pw reused in another record, '0'=pw not reused)
 
-            pw_reuse (default: null, str) Checks whether pw has been reused in another record
-                (values: null = unset, '1' = pw reused in another record, '0' = pw not reused  )
+        pw_complexity (default: null, str) Determines the pw strength
 
-            pw_complexity (default: null, str) Determines the pw strength
-                (values: null = unset, 'u' = unsuitable, 'w' = weak, 'a' = average, 'g' = good, 'e' = excellent)
+        security_rating (default: null, str) Rates overall security of a record 
+            (values: null = unset, range '0'-'15')
 
-            security_rating (default: null, str) Rates overall security of a record based on the 3 pw attributes defined above
-                (values: null = unset, range '0'-'15')
-
-                ratings: 
-
-                    pw_age (3):          'n' =  3, 'o' =  2, 'r' = -1
-                    pw_reuse (6):        '0' =  6, '1' =  0
-                    pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
-                    ___________________________________________________________________________
-                    Total score (15):    max = 15, min = 0 (negative values are set to 0)
-                    
-                    (14-15) : Outstanding
-                    (12-13) : Good
-                    (10-11) : Average
-                    (7-9)   : Poor
-                    (0-6)   : Critical
-                
         """
 
         self.__website = website.lower()
         self.__password = password
 
         if (last_modified == ''):
+
             self.update_last_modified()
+
         else:
-            self.__last_modified = last_modified
+
+            reset_date    = False
+
+            test_date_obj = None
+
+            try:
+                test_date_obj = datetime.strptime(last_modified, "%d-%m-%Y %H:%M")
+
+                if (test_date_obj >= datetime.now()):
+                    reset_date = True
+
+            except (ValueError):
+                reset_date = True
+
+            if (reset_date):
+                self.update_last_modified()
+            else:
+                self.__last_modified = last_modified
 
         self.__email = ''
         self.__username = ''
@@ -100,9 +124,8 @@ class Record():
 
     def __str__(self):
 
-        s = "Site: %s, Pass: %s, Last Modified: %s" % (\
-                self.get_website(), self.get_password(), \
-                self.get_last_modified())
+        s = "Site: %s, Pass: %s, Last Modified: %s" % (self.get_website(), \
+                self.get_password_encrypted(), self.get_last_modified())
 
         if (self.__email != ''):
             s = '%s, Email: %s' % (s, self.get_email())
@@ -163,29 +186,29 @@ class Record():
         """
         Makes our data compatible with double quote enclosed csv format
         """
-    
+
         tmp_data = list(data)
-    
+
         new_list = []
         new_list.append('"')
-    
+
         # Since we use double quoted csv format,
         # if there's any double quote present, it
         # needs to be replaced wit 2 double quote
         if '"' in tmp_data:
             for i in range(len(tmp_data)):
-    
+
                 if (tmp_data[i] == '"'):
                     new_list.append('"')
                     new_list.append('"')
                 else:
                     new_list.append(tmp_data[i])
-    
+
             new_list.append('"')
         else:
             new_list = new_list + tmp_data
             new_list.append('"')
-    
+
         return (''.join(new_list))
 
 
@@ -207,7 +230,7 @@ class Record():
         #==========================================================
 
         data = '%s' % self.format_field_csv(self.get_website())
-        data = '%s,%s' % (data, self.format_field_csv(self.get_password()))
+        data = '%s,%s' % (data, self.format_field_csv(self.get_password_encrypted()))
         data = '%s,%s' % (data, self.format_field_csv(self.get_last_modified()))
         data = '%s,%s' % (data, self.format_field_csv(self.get_email()))
         data = '%s,%s' % (data, self.format_field_csv(self.get_username()))
@@ -244,7 +267,7 @@ class Record():
         ## Format
         # 'dd-mm-yyyy hh:min'
 
-        self.__last_modified = DateTime.today().strftime("%d-%m-%Y %H:%M")
+        self.__last_modified = datetime.today().strftime("%d-%m-%Y %H:%M")
 
 
     def get_group(self):
@@ -253,7 +276,7 @@ class Record():
     def get_website(self):
         return self.__website
 
-    def get_password(self):
+    def get_password_encrypted(self):
         return self.__password
 
     def get_last_modified(self):
@@ -272,7 +295,7 @@ class Record():
 
         if (self.__two_factor == '1'):
             return 'Enabled'
-        else:  # self.__two_factor == '0'
+        else:
             return 'Disabled'
 
     def get_recovery_email(self):
@@ -351,29 +374,28 @@ class ManageRecord():
         interfaces to interact with data on a higher level
         """
 
-        self.__salt_length = 32
-        self.__record_list = []
-        self.__hash_length = 64 # SHA-256
-        self.__salt_1 = ''
-        self.__encrypted_data = ''
-        self.__encryption_key_1 = ''
-        self.__encryption_key_2 = ''
-        self.__master_password = ''
-        self.__salt_2 = ''
+        self.__salt_length       = 32
+        self.__record_list       = []
+        self.__hash_length       = 64 # SHA-256
 
-        self.__symbols = "!@#$%^&*(){}[]<>?+-"
-        self.__ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        self.__num = "0123456789"
-        self.__lcase = "abcdefghijklmnopqrstuvwxyz"
+        self.__master_password   = ''
+
+        self.__encryption_key_1  = ''
+        self.__encryption_key_2  = ''
+        self.__salt_1            = ''
+        self.__salt_2            = ''
+
+        self.__symbols           = "[!@#$%&,./<;()|:^{}]?-_*'+=>"
+        self.__ucase             = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        self.__num               = "0123456789"
+        self.__lcase             = "abcdefghijklmnopqrstuvwxyz"
 
 
-    def print_data(self):
-
-        print(len(self.__record_list))
-        
-        for item in self.__record_list:
-            print(item)
-
+    '''
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃   Database Encryption Management                                   ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    '''
 
     def get_key(self):
 
@@ -394,6 +416,7 @@ class ManageRecord():
 
         return self.__encryption_key_2.decode('utf-8')
 
+
     def get_master_password(self):
 
         """
@@ -406,81 +429,14 @@ class ManageRecord():
         return self.__master_password
 
 
-    def validate_index(self, index=None, item_list=None):
-
-        """
-        Validates index or a list of indexes against the 2nd
-        parameter (item_list). If 2nd parameter is not provided,
-        then indexes are validated against internal datastructure
-        (__record_list).
-
-        Args:    1) An int value or a list of integers 
-                 2) The list which will be used to validate indexes
-                    (Default: If set to None, will use __record_list)
-
-        Returns: Boolean value indicating whether index/indexes are valid
-        
-        """
-
-        if (item_list == None):
-            item_list = self.__record_list
-
-        if (len(item_list) == 0):
-            return False
-
-        if (type(index) == int):
-            if (index >= 0 and (index < len(item_list))):
-                return True
-            else:
-                return False
-        elif (type(index) == list):
-            for i in index:
-                if (i < 0 or (i >= len(item_list))):
-                    return False
-            return True
-        else:
-            return False
-
-
-    def get_index(self, index):
-
-        """
-        Provides the record object at the specified index
-          * Less secure version, will be depreciated in future versions
-
-        Args:    index (int)
-        Returns: (Record)
-        
-        """
-
-        r = self.__record_list[index]
-        r.set_password(self.get_pw_of_index(index))
-
-        return r
-
-
-    def get_index_with_enc_pw(self, index):
-
-        """
-        Provides the record object at the specified index with enc pw
-
-        Args:    index (int)
-        Returns: (Record)
-        
-        """
-
-        r = self.__record_list[index]
-
-        return r
-
-
     def get_pw_of_index(self, index, enc_key=''):
 
         """
-        Decrypted pw of given index
+        Plain text pw of given index
+
+        * enc_key is not required unless we're migrating database 
+          from old key to a new key
         """
-        
-        pw = self.__record_list[index].get_password()
 
         fernet_handler = ''
 
@@ -489,14 +445,12 @@ class ManageRecord():
         else:
             fernet_handler = Fernet(enc_key)
 
-        pw = bytes(pw, 'utf-8')
-
         try:
-            pw = fernet_handler.decrypt(pw).decode('utf-8')
-        except InvalidToken:
-            raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
+            return fernet_handler.decrypt(bytes(self.__record_list[index].get_password_encrypted(), \
+                    'utf-8')).decode('utf-8')
 
-        return pw
+        except (InvalidToken, UnicodeDecodeError):
+            raise IncorrectPasswordException('Unable to decrypt pw, database possibly corrupted')
 
 
     def get_pw_of_index_with_sec_mem(self, index, enc_key=''):
@@ -505,8 +459,6 @@ class ManageRecord():
         Returns an object of AllocateSecureMemory() function, 
                which can wipe off sensitive information after operation
         """
-        
-        pw = self.__record_list[index].get_password()
 
         fernet_handler = ''
 
@@ -515,23 +467,185 @@ class ManageRecord():
         else:
             fernet_handler = Fernet(enc_key)
 
-        pw = bytes(pw, 'utf-8')
-
         try:
-            sec_mem_handler = AllocateSecureMemory(fernet_handler.decrypt(pw).decode('utf-8'))
-        except InvalidToken:
-            raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
+            return AllocateSecureMemory(fernet_handler.decrypt(bytes( \
+                    self.__record_list[index].get_password_encrypted(), 'utf-8')).decode('utf-8'))
 
-        return sec_mem_handler
+        except (InvalidToken, UnicodeDecodeError):
+            raise IncorrectPasswordException('Unable to decrypt pw, database possibly corrupted')
 
 
-    def get_pw_of_record(self, record_obj=None, enc_key=''):
+    def generate_new_key(self, \
+            password='', generate_salt=True,
+               update_enc_key=True, path_to_keyfile=''):
 
         """
-        Decrypted pw of given record (used in audit_pw_reuse() in audit function)
+        Uses a combination of salt and input password to 
+        generate a new key. Both the salt and encryption
+        keys are automatically updated internally when
+        they are generated if the 3rd parameter is True.
+
+        In situations for example when loading the file,
+        the salt is already present so the 2nd parameter 
+        can be set to false in order to generate new key 
+        from user password.
+
+        Args:       1) The password to use to derive the key (str)
+                    2) Whether to generate a new salt (bool)
+                    3) Whether to update_enc_key or just return the new key (bool)
+                    4) Path to key file, if you want to use combine it with
+                       master password to strengthen key. (Default: null)
+
+        Returns:    The generated key if 3rd parameter is True, otherwise
+                    updates internal master key 
+
+        Exceptions: FileNotFoundError
         """
-        
-        pw = record_obj.get_password()
+
+        if (password == ''):
+            print("generate_new_key(): Requires a password to generate new key")
+            return
+
+        # Generating new salt, if one doesn't already exist
+        if (generate_salt):
+            # Used for database encryption
+            self.__salt_1 = os.urandom(self.__salt_length) 
+
+        key = ''
+
+        if (path_to_keyfile == ''):
+
+            kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
+                    length=32, salt=self.__salt_1, iterations=1000000)
+
+            key = base64.urlsafe_b64encode(\
+                    kdf.derive(bytes(password, 'utf-8')))
+
+        else:
+
+            if (not os.path.isfile(path_to_keyfile)):
+                raise FileNotFoundError('generate_new_key(): keyfile not found')
+
+            kf_data = ''
+
+            output = keyfile_load(path_to_keyfile)
+
+            if (not output[0] or len(output[1]) < 1000):
+                raise KeyFileInvalidException()
+            else:
+                kf_data = bytes(output[1], 'utf-8')
+
+            kf_data = kf_data + bytes(password, 'utf-8')
+
+            kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
+                    length=32, salt=self.__salt_1, iterations=1000000)
+
+            key = base64.urlsafe_b64encode(kdf.derive(kf_data))
+
+        if (update_enc_key):
+            self.__encryption_key_1 = key
+            self.__generate_new_key_2()
+        else:
+            return key.decode('utf-8')
+
+
+    def __generate_new_key_2(self):
+
+        if (self.__encryption_key_1 == ''):
+            raise InvalidParameterException('__generate_new_key_2(): ' + \
+                                            'key 1 needs to be generated first, ' + \
+                                            'call the generate_new_key() function')
+        if (self.__salt_2 == ''):
+            self.__salt_2 = os.urandom(self.__salt_length)
+
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
+                length=32, salt=self.__salt_2, iterations=1000000)
+
+        _key = self.__encryption_key_1
+
+        self.__encryption_key_2 = base64.urlsafe_b64encode(kdf.derive(_key))
+
+
+    def change_password(self, new_password=''):
+
+        """
+        Generates new salt and derives a new key based on the 
+        new password. Re-encrypts database with new key.
+
+        Args:    The new password to use to encrypt the database
+
+        Returns: Boolean value indicating success / failure
+        """
+
+        old_key_2 = self.__encryption_key_2
+
+        self.__master_password = new_password
+        self.generate_new_key(new_password, generate_salt=True, update_enc_key=True)
+
+        self.__migrate_all_pw_from_old_to_new_key(old_key_2, self.__encryption_key_2)
+
+
+    def use_keyfile(self, pw, path_to_keyfile=''):
+
+        old_key_2 = self.__encryption_key_2
+
+        self.__master_password = pw
+        self.generate_new_key(pw, True, True, path_to_keyfile)
+
+        self.__migrate_all_pw_from_old_to_new_key(old_key_2, self.__encryption_key_2)
+
+
+    def remove_keyfile(self, pw):
+
+        old_key_2 = self.__encryption_key_2
+
+        self.__master_password = pw
+        self.generate_new_key(pw, True, True, '')
+
+        self.__migrate_all_pw_from_old_to_new_key(old_key_2, self.__encryption_key_2)
+
+
+    def generate_hash(self, input_str):
+
+        """
+        Returns a sha256 hash digest value of the input string
+
+        Args:       A byte encoded string
+
+        Returns:    (str)
+        """
+
+        if (not (type(input_str) == bytes or type(input_str) == str)):
+            raise TypeError('generate_hash(): first parameter needs to be of type bytes or str')
+
+        if (type(input_str) == str):
+            return sha256(bytes(input_str, 'utf-8')).hexdigest()
+        else:
+            return sha256(input_str).hexdigest()
+
+
+    def __migrate_all_pw_from_old_to_new_key(self, old_key='', new_key=''):
+
+        if (old_key == '' or new_key == ''):
+            raise InvalidParameterException('migrate_all_pw_from_old_to_new_key():' + \
+                ' encryption keys cannot be empty')
+
+        for i in range(len(self.__record_list)):
+
+            pw = self.get_pw_of_index(i, old_key)
+
+            self.__record_list[i].set_password(self.__encrypt_pw(pw, new_key))
+
+
+    def __encrypt_pw(self, pw, enc_key=''):
+
+        """
+        Encrypts the input pw & return it in str form
+
+        As it will be in memory & used by db for various str operations, 
+        we convert it to a str instead of byte form. That way it also complies 
+        with the rules of existing interface
+        """
 
         fernet_handler = ''
 
@@ -540,14 +654,853 @@ class ManageRecord():
         else:
             fernet_handler = Fernet(enc_key)
 
-        pw = bytes(pw, 'utf-8')
+        return fernet_handler.encrypt(bytes(pw, 'utf-8')).decode()
+
+
+    def __encrypt_database_in_memory(self):
+
+        """
+        Encrypts the entire database
+
+        Used by: write_encrypted_database()
+        """
+
+        data = self.format_csv(include_header=False)
+
+        output_str = ''
+
+        for item in data: 
+            output_str += item 
+
+        fernet_handler = Fernet(self.__encryption_key_1)
+
+        return fernet_handler.encrypt(bytes(output_str, 'utf-8'))
+
+
+    '''
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃   Database Read / Write                                            ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    '''
+
+    def write_encrypted_database(self, filename='data.enc'):
+
+        """
+        Responsible for encryption of database
+
+        Args:       The name of the regular encryted file. (Default: 'data.enc')
+
+        Returns:    Boolean value indicating whether the operation succeeded or not.
+
+        Exceptions:
+
+         1) NoKeyFoundException if a new key hasn't been generated
+         2) IOError If an error occured while reading/writing file
+
+        Notes:
+
+              06/19/2024:
+
+                  * Original file format had 'PWMGR' flag, which was used to identify the file format, 
+                         but down the line it got hacked & removed, that has now been fixed.
+        """
+
+        if (self.__encryption_key_1 == '' or self.__salt_1 == '' or \
+                self.__encryption_key_2 == '' or self.__salt_2 == ''):
+
+            # This exception like won't occur as frontend will make sure that
+            # the key has been initialized first before calling this function, 
+            # but it is kept as a safety measure in case this library 
+            # is used by other programs or for testing
+            raise NoKeyFoundException('Need to initialize key first, ' + \
+                    'call generate_new_key() function')
+
+        #-----------------------------------------------#  #-----------------------------------------------# 
+        # File without data                             #  # File with data                                #
+        #-----------------------------------------------#  #-----------------------------------------------#
+        # PWMGR | 00 | hash | salt-1 | salt-2           #  # PWMGR | 01 | hash | salt-1 | salt-2 | data    #
+        #-----------------------------------------------#  #-----------------------------------------------#
+
+        format_name    = 'PWMGR'
+        format_version = ''
+
+        file_hash      = ''
+
+        if (len(self.__record_list) == 0):
+
+            format_version = '00'
+            file_hash = self.generate_hash(bytes(format_name, 'utf-8') + \
+                                           bytes(format_version, 'utf-8') + \
+                                                 self.__salt_1 + \
+                                                 self.__salt_2)
+        else:
+
+            format_version = '01'
+
+            data           =  self.__encrypt_database_in_memory()
+
+            file_hash = self.generate_hash(bytes(format_name, 'utf-8') + \
+                                           bytes(format_version, 'utf-8') + \
+                                                 self.__salt_1 + \
+                                                 self.__salt_2 + \
+                                                 data)
+        try:
+
+            with open(filename, 'wb') as fh:
+                fh.write(bytes(format_name, 'utf-8'))
+                fh.write(bytes(format_version, 'utf-8'))
+                fh.write(bytes(file_hash, 'utf-8'))
+                fh.write(self.__salt_1)
+                fh.write(self.__salt_2)
+
+                if (format_version == '01'):
+                    fh.write(data)
+
+        except IOError:
+            print("write_encrypted_database(): error#1 occured while writing database")
+            return False
+
+        return True
+
+
+    def load_database(self, filename='data.enc', password='', \
+                            override_integrity_check=False,   \
+                            path_to_keyfile='',               \
+                            load_key_from_keyring=False,      \
+                            enc_key=''):
+
+        """
+
+        Attempts to load database from specified path (filename)
+
+        Args: Specify path to the database
+
+        Returns: Boolean value indicating success / failure
+
+        Exceptions:
+
+         1) UnsupportedFileFormatException    File format is not supported
+
+         2) IntegrityCheckFailedException     Calculated hash is incorrect
+
+         3) IncorrectPasswordException        Data decryption failed
+
+         4) InvalidParameterException         Input parameters are incorrect
+
+         5) DataCorruptedException            Decoding of unicode characters failed
+
+        """
+
+        ## Some of the parameter checks are not required as it is handled
+        ## by frontend, but its still placed in here as a safety measure 
+        ## in case this library is used by other programs.
+
+        if (password == '' and load_key_from_keyring == False):
+            raise InvalidParameterException("load_database(): Password parameter cannot be empty")
+        elif (load_key_from_keyring == True and enc_key == ''):
+            raise InvalidParameterException("load_database(): Encryption key cannot be empty")
+        elif (not os.path.isfile(filename)):
+            raise InvalidParameterException("load_database(): Database file '%s' does not exist" % filename)
+
+        fh = open(filename, 'rb')
+
+        format_name          = 'PWMGR'
+        format_name_bytes    = ''
+
+        format_version       = ''
+        format_version_bytes = ''
 
         try:
-            pw = fernet_handler.decrypt(pw).decode('utf-8')
-        except InvalidToken:
-            raise IncorrectPasswordException('Unable to decrypt pw, encryption key is incorrect')
+            # 'PWMGR'
+            format_name_bytes = fh.read(5)
 
-        return pw
+            # '00' / '01'
+            format_version_bytes = fh.read(2)
+
+        except IOError:
+            fh.close()
+            raise DataCorruptedException("load_database(): IO error occured " + \
+                                         "while reading database (error#1)")
+
+        if (format_name_bytes == '' or format_version_bytes == ''):
+            raise UnsupportedFileFormatException("load_database(): Format is not recognized (error#2)")
+
+        output1 = decode_unicode_str_safely(format_name_bytes)
+        output2 = decode_unicode_str_safely(format_version_bytes)
+
+        if (not (output1[0] and output1[1] == format_name)):
+            fh.close()
+            raise UnsupportedFileFormatException("load_database(): Format is not recognized (error#3)")
+
+
+        if (output2[0] and output2[1] in ['00','01'] ):
+
+            format_version = output2[1]
+
+        else:
+
+            fh.close()
+            raise UnsupportedFileFormatException("load_database(): Format is not recognized (error#4)")
+
+        loaded_hash = ''
+
+        try:
+            loaded_hash   = fh.read(self.__hash_length)
+            self.__salt_1 = fh.read(self.__salt_length)
+            self.__salt_2 = fh.read(self.__salt_length)
+        except IOError:
+            fh.close()
+            raise DataCorruptedException("load_database(): IO error occured " + \
+                                         "while reading database (error#5)")
+
+        if (loaded_hash == '' or self.__salt_1 == '' or self.__salt_2 == ''):
+            fh.close()
+            raise UnsupportedFileFormatException("load_database(): Format is not recognized (error#6)")
+
+
+        #-----------------------------------------------#  #-----------------------------------------------# 
+        # File with data                                #  # File without data                             #
+        #-----------------------------------------------#  #-----------------------------------------------#
+        # PWMGR | 01 | hash | salt-1 | salt-2 | data    #  # PWMGR | 00 | hash | salt-1 | salt-2           #
+        #-----------------------------------------------#  #-----------------------------------------------#
+
+        data = ''
+
+        if (format_version == '01'):
+
+            try:
+                data = fh.read()
+                fh.close()
+            except IOError:
+                fh.close()
+                raise DataCorruptedException("load_database(): IO error occured " + \
+                                             "while reading database (error#7)")
+
+            if (data == ''):
+                raise UnsupportedFileFormatException("load_database(): Format is not recognized (error#8)")
+
+        if (not override_integrity_check):
+
+            generated_hash = ''
+
+            if (format_version == '01'):
+                generated_hash = self.generate_hash(format_name_bytes + format_version_bytes + \
+                                                    self.__salt_1 + self.__salt_2 + data)
+            else:
+                generated_hash = self.generate_hash(format_name_bytes + format_version_bytes + \
+                                                    self.__salt_1 + self.__salt_2)
+
+            if (loaded_hash != bytes(generated_hash, 'utf-8')):
+                raise IntegrityCheckFailedException('load_database(): Hash mismatch detected (error#9)')
+
+        if (load_key_from_keyring):
+            self.__encryption_key_1 = enc_key
+            self.__generate_new_key_2()
+        else:
+            self.generate_new_key(password=password, generate_salt=False, \
+                                     update_enc_key=True, path_to_keyfile=path_to_keyfile)
+
+        if (format_version == '01'):
+
+            fernet_handler = Fernet(self.__encryption_key_1)
+
+            try:
+                decrypted = fernet_handler.decrypt(data)
+            except InvalidToken:
+                raise IncorrectPasswordException("load_database(): Password is incorrect (error#10)")
+
+            output = decode_unicode_str_safely(decrypted)
+
+            if (output[0]):
+                decrypted = output[1]
+            else:
+                raise DataCorruptedException("load_database(): IO error occured " + \
+                                                 "while reading database (error#11)")
+
+            if (not load_key_from_keyring):
+                self.__master_password = password
+
+            self.convert_csvlist_to_record(self.read_csv_in_memory(decrypted), True)
+
+        return True
+
+
+    '''
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃   Database Password Auditing                                       ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    '''
+
+    def audit_security(self):
+
+        ## Combining pw_reuse & pw_complexity otherwise we'd run into memory enc errors
+        ##      due to the way this enc library functions
+
+        self.audit_pw_age_all()
+        self.audit_pw_reuse_and_cmp_all()
+        self.rate_overall_security()
+
+
+    # [x] Tested
+    def sort_security_rating(self):
+
+        """
+        Sorts records by security ratings in ascending or descending order based 
+        on the paramter that has been set. Need to call audit_security() first before 
+        calling this function.
+
+         Ratings: 
+
+            (15) Superb
+            (14) Excellent
+         (12-13) Good
+         (10-11) Average
+           (7-9) Weak
+           (0-6) Critical
+
+        Returns:  List of record indexes sorted in (ascending/descending order) 
+                  based on overall security rating
+
+        """
+
+        if (len(self.__record_list) == 0):
+            return []
+
+        sorted_indexes = []
+
+        ## TODO: index,rating list needs to be sorted using optimized sorting method
+
+        # Removing unavailable ratings
+        for i in range(0, len(self.__record_list)):
+            if (self.__record_list[i].get_security_rating() != ''):
+                sorted_indexes.append(i)
+
+
+        while (True):
+
+            index_moved = False
+
+            for i in range(0, len(sorted_indexes)-1):
+
+                try:
+                    rt1 = int(self.__record_list[sorted_indexes[i]].get_security_rating())
+                    rt2 = int(self.__record_list[sorted_indexes[i+1]].get_security_rating())
+                except ValueError:
+                    continue
+
+                if (rt1 > rt2):
+                    tmp_index = sorted_indexes[i+1]
+                    sorted_indexes[i+1] = sorted_indexes[i]
+                    sorted_indexes[i] = tmp_index
+                    index_moved = True
+
+            if (not index_moved):
+                break
+
+        return sorted_indexes
+
+
+    # [x] Tested, Initial testing done. More testing needed
+    def rate_overall_security(self):
+
+        """
+                   Rates overall security posture of all records in database
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                             Ratings
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+         pw_complexity (6)  's' =  6, 'e' =  5, 'g' =  2, 'a' =  0, 'w' = -3, 'u' = -6
+         pw_age        (3)  'n' =  3, 'o' =  1, 'r' = -3, 't' = -5, 'h' = -6
+         pw_reuse      (6)  '0' =  6, '1' =  0
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         Total score (15)   max = 15, min = 0 (negative values are set to 0)
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            (15) Superb
+            (14) Excellent
+         (12-13) Good
+         (10-11) Average
+           (7-9) Weak
+           (0-6) Critical
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        """
+
+        if (len(self.__record_list) == 0):
+            return []
+
+        for i in range(len(self.__record_list)):
+
+            r = self.__record_list[i]
+
+            rating_age = 0
+            rating_reuse = 0
+            rating_complexity = 0
+            rating_total = 0
+
+            pw_age = r.get_pw_age()
+
+            # pw_age (3)  'n' =  3, 'o' =  1, 'r' = -3, 't' = -5, 'h' = -6
+            if (pw_age == 'n'):
+                rating_age = 3
+            elif (pw_age == 'o'):
+                rating_age = 1
+            elif (pw_age == 'r'):
+                rating_age = -3
+            elif (pw_age == 't'):
+                rating_age = -5
+            elif (pw_age == 'h'):
+                rating_age = -6
+            else: # Skipping rating if there's errors with last_modified attribute
+                continue
+
+            pw_reuse = r.get_pw_reuse()
+
+            # pw_reuse (6)  '0' =  6, '1' = 0
+            if (pw_reuse == '0'):
+                rating_reuse = 6
+            elif (pw_age == '1'):
+                rating_reuse = 0
+
+            # pw_complexity (6)  's' =  6, 'e' =  5, 'g' =  2, 'a' =  0, 'w' = -3, 'u' = -6
+            pw_complexity = r.get_pw_complexity()
+
+            if (pw_complexity == 's'):
+                rating_complexity = 6
+            elif (pw_complexity == 'e'):
+                rating_complexity = 5
+            elif (pw_complexity == 'g'):
+                rating_complexity = 2
+            elif (pw_complexity == 'a'):
+                rating_complexity = 0
+            elif (pw_complexity == 'w'):
+                rating_complexity = -3
+            elif (pw_complexity == 'u'):
+                rating_complexity = -6
+
+            rating_total = rating_age + rating_reuse + rating_complexity
+
+            if (rating_total < 0):
+                rating_total = 0
+
+            rating_str = '%d' % (rating_total)
+
+            self.__record_list[i].set_security_rating(rating_str)
+
+
+    # [x] Tested
+    def audit_pw_age_all(self):
+
+        """
+        Audits records to check if they exceed the desired password age,
+            & stores audit information within each record
+
+        Returns: 7 lists
+
+                 Not audited / Error / No Password age information ('e')
+                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                 1) List of record indexes whose last modified value
+                    is blank / not updated.
+                    (This could be because after importing from another 
+                    password manager datebase)
+
+                 2) List of record indexes whose last modified value
+                    is probably incorrect as it points to somewhere 
+                    in the future
+
+
+                 Audited attributes ('n', 'o', 'r', 't', 'h')
+                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                 3) Password age is < 6 months & don't need to be changed ('n')
+
+                 4) Password age is >= 6 months to < 1 year old ('o')
+
+                 5) Password age is >= 1 year and < 1.5 years.
+                    The user would be recommended to change it ('r')
+
+                 6) Password age is 1.5-2 years, change is urgently required ('t')
+
+                 7) Password age is > 2 years, password change is critical
+                    for overall security ('h')
+        """
+
+        lm_not_updated         =     []
+        lm_err                 =     []
+        pw_reset_not_needed    =     []
+        pw_reset_optional      =     []
+        pw_reset_recommended   =     []
+        pw_reset_urgent        =     []
+        pw_reset_critical      =     []
+
+        for i in range(len(self.__record_list)):
+
+            lm = self.__record_list[i].get_last_modified()
+
+            if (lm == ''):
+                lm_not_updated.append(i)
+                continue
+            else:
+                result = self.audit_pw_age_single_record(i)
+
+                if (result == 'e'):
+                    lm_err.append(i)
+                elif (result == 'n'):
+                    pw_reset_not_needed.append(i)
+                elif (result == 'o'):
+                    pw_reset_optional.append(i)
+                elif (result == 'r'):
+                    pw_reset_recommended.append(i)
+                elif (result == 't'):
+                    pw_reset_urgent.append(i)
+                elif (result == 'h'):
+                    pw_reset_critical.append(i)
+
+        return lm_not_updated, lm_err, pw_reset_not_needed, \
+                     pw_reset_optional, pw_reset_recommended, \
+                     pw_reset_urgent, pw_reset_critical
+
+
+    def audit_pw_age_single_record(self, chosen_index=-1):
+
+        """
+        Audits records to check if they exceed the desired password age,
+            & stores audit information within each record
+
+        * If there's any errors, for example last modified is missing,
+            (which probably won't happen) pw_age attribute is set to 'e'
+
+        Returns: A char in the range as show in the chart below
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           pw_age (3) 'n' =  3, 'o' =  1, 'r' = -2, 't' = -4, 's' = -6, 'e' = n/a
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                   n =          #days < 0.5 yr
+                                   o = 0.5 yr < #days < 1 yr
+                                   r =   1 yr < #days < 1.5 yr
+                                   t = 1.5 yr < #days < 2 yr
+                                   h =   2 yr < #days
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+
+        if (chosen_index == -1):
+            raise InvalidParameterException('audit_pw_age_single_record(): Index parameter cannot be empty')
+
+        day_today = datetime.today()
+
+        days_this_year = 365
+        half_year = 180
+
+        if (self.is_year_leap_year(day_today.year)):
+            days_this_year = 366
+
+        # 1 < 1yr+ < 1.5
+        days_1_yr_plus = days_this_year + 180
+
+        days_2_yr = (days_this_year * 2)
+
+        lm = self.__record_list[chosen_index].get_last_modified()
+
+        if (lm == ''):
+            self.__record_list[i].set_pw_age('e')
+            return
+
+        date = lm.split(' ')[0]
+        time = lm.split(' ')[1]
+
+        day = int(date.split('-')[0])
+        month = int(date.split('-')[1])
+        yr = int(date.split('-')[2])
+
+        hr = int(time.split(':')[0])
+        minute = int(time.split(':')[1])
+
+        days_of_past = datetime(yr, month, day, hr, minute)
+
+        '''
+            n =          #days < 0.5 yr
+            o = 0.5 yr < #days < 1 yr
+            r =   1 yr < #days < 1.5 yr
+            t = 1.5 yr < #days < 2 yr
+            h =   2 yr < #days
+        '''
+
+        if (days_of_past > day_today):
+
+            ## 'e' metric is used for errors, usually we won't get this
+            self.__record_list[chosen_index].set_pw_age('e')
+            return 'e'
+
+        num_days = (day_today-days_of_past).days
+
+        if (num_days < half_year):
+            self.__record_list[chosen_index].set_pw_age('n')
+            return 'n'
+        elif (num_days < days_this_year):
+            self.__record_list[chosen_index].set_pw_age('o')
+            return 'o'
+        elif (num_days < days_1_yr_plus):
+            self.__record_list[chosen_index].set_pw_age('r')
+            return 'r'
+        elif (num_days < days_2_yr):
+            self.__record_list[chosen_index].set_pw_age('t')
+            return 't'
+        else:
+            self.__record_list[chosen_index].set_pw_age('h')
+            return 'h'
+
+
+    def is_year_leap_year(self, y=0):
+
+        if (y <= 0):
+            return False
+
+        if (y % 4 != 0):
+            return False
+
+        else:
+
+            if (y % 100 != 0):
+                return True
+            elif (y % 400 == 0):
+                return True
+            else:
+                return False
+
+
+    # [x] Tested
+    def audit_pw_reuse_and_cmp_all(self):
+
+        """
+        Audits records to see if any of them reuse the same password & the pw complexity
+
+        Returns: None
+        """
+
+        rec_len = len(self.__record_list)
+
+        ## PW Reuse Calculations
+        if (rec_len == 0):
+            return
+
+        elif (rec_len == 1):
+            self.__record_list[0].set_pw_reuse('0')
+
+        else:
+
+            reuse_pw_indexes_l = []
+
+            pw_list = []
+
+            for i in range(rec_len):
+                pw_list.append(self.get_pw_of_index(i))
+
+            for i in range(0, rec_len):
+
+                if (i in reuse_pw_indexes_l):
+                    continue
+
+                pw1 = pw_list[i]
+
+                match = False
+
+                for j in range(0, rec_len):
+
+                    if (j==i or j in reuse_pw_indexes_l):
+                        continue
+
+                    pw2 = pw_list[j]
+
+                    if (pw1 == pw2):
+                        match = True
+                        reuse_pw_indexes_l.append(j)
+
+                if (match):
+                    reuse_pw_indexes_l.append(i)
+
+            reuse_pw_indexes_l = list(set(reuse_pw_indexes_l))
+
+            for i in range(0, rec_len):
+
+                if (i not in reuse_pw_indexes_l):
+                    self.__record_list[i].set_pw_reuse('0')
+                else:
+                    self.__record_list[i].set_pw_reuse('1')
+
+        ## PW Complexity calculations
+        for i in range(0, rec_len):
+
+            self.__record_list[i].set_pw_complexity(self.audit_pw_complexity(pw_list[i]))
+
+
+    # [x] Tested
+    def audit_pw_complexity(self, pw=''):
+
+        """
+                             * Rates password complexity of the input password
+
+
+                                             Rating Metrics:
+
+                             4 character classes (upper, lower, symbols, digits)
+
+              u,w,a,g,e,s where u=unsuitable, w=weak, a=avg, g=good, e=excellent, s=superb
+
+
+                Unsuitable        Typically length is less than 8 characters
+
+
+                Weak              This is the recommendation from the 90's which
+                                  consists of minimum of 8 characters and mix of
+                                  character classes
+
+
+                Average           This is what is recommended by most password managers
+
+
+                Good              PW length in the range of 12-14, with a mix of 3 or more classes
+
+
+                Excellent         This ensures that there's a high probability
+                                  that your password will not be part of a wordlist
+                                  found in the wild
+
+
+                Superb            This makes bruteforce style attacks unfeasible
+                                  using modern gpu clusters. This is as close to having
+                                  full cracking immunity as you can get
+        """
+
+        ##                         pw_len, n chr classes, rating
+
+        pw_complexity_rating_l =   {( 8, 1) : 'u', ( 8, 2) : 'u', ( 8, 3) : 'u', ( 8, 4) : 'w', \
+                                    ( 9, 1) : 'u', ( 9, 2) : 'u', ( 9, 3) : 'u', ( 9, 4) : 'w', \
+                                    (10, 1) : 'u', (10, 2) : 'u', (10, 3) : 'u', (10, 4) : 'w', \
+                                    (11, 1) : 'u', (11, 2) : 'w', (11, 3) : 'w', (11, 4) : 'a', \
+                                    (12, 1) : 'w', (12, 2) : 'w', (12, 3) : 'a', (12, 4) : 'g', \
+                                    (13, 1) : 'w', (13, 2) : 'a', (13, 3) : 'a', (13, 4) : 'g', \
+                                    (14, 1) : 'w', (14, 2) : 'a', (14, 3) : 'g', (14, 4) : 'g', \
+                                    (15, 1) : 'a', (15, 2) : 'g', (15, 3) : 'g', (15, 4) : 'e', \
+                                    (16, 1) : 'a', (16, 2) : 'g', (16, 3) : 'g', (16, 4) : 'e', \
+                                    (17, 1) : 'g', (17, 2) : 'g', (17, 3) : 'g', (17, 4) : 'e', \
+                                    (18, 1) : 'g', (18, 2) : 'g', (18, 3) : 'e', (18, 4) : 'e', \
+                                    (19, 1) : 'g', (19, 2) : 'g', (19, 3) : 'e', (19, 4) : 'e', \
+                                    (20, 1) : 'g', (20, 2) : 'g', (20, 3) : 'e', (20, 4) : 'e', \
+                                    (21, 1) : 'g', (21, 2) : 'e', (21, 3) : 'e', (21, 4) : 's', \
+                                    (22, 1) : 'g', (22, 2) : 'e', (22, 3) : 'e', (22, 4) : 's', \
+                                    (23, 1) : 'g', (23, 2) : 'e', (23, 3) : 'e', (23, 4) : 's', \
+                                    (24, 1) : 'e', (24, 2) : 'e', (24, 3) : 's', (24, 4) : 's', \
+                                    (25, 1) : 'e', (25, 2) : 'e', (25, 3) : 's', (25, 4) : 's', \
+                                    (26, 1) : 'e', (26, 2) : 'e', (26, 3) : 's', (26, 4) : 's', \
+                                    (27, 1) : 'e', (27, 2) : 's', (27, 3) : 's', (27, 4) : 's', \
+                                    (28, 1) : 'e', (28, 2) : 's', (28, 3) : 's', (28, 4) : 's', \
+                                    (29, 1) : 'e', (29, 2) : 's', (29, 3) : 's', (29, 4) : 's', \
+                                    (30, 1) : 's', (30, 2) : 's', (30, 3) : 's', (30, 4) : 's'}
+
+
+        pw_len = len(pw)
+
+        n_chr_classes = self.check_num_char_classes(pw)
+
+
+        if (pw_len < 8):
+
+            return 'u'
+
+        elif (pw_len > 30):
+
+            return 's'
+
+        else:
+
+            return pw_complexity_rating_l.get((pw_len, n_chr_classes))            
+
+
+    def check_num_char_classes(self, pw=''):
+
+        """
+        Returns the number of character classes that are present in a password  
+
+        """
+
+        _pw = list(pw)
+
+        count_l = 0
+        count_s = 0
+        count_u = 0
+        count_n = 0
+
+        for i in range(len(_pw)):
+
+            if (_pw[i] in self.__lcase):
+                count_l += 1
+            elif (_pw[i] in self.__symbols):
+                count_s += 1
+            elif (_pw[i] in self.__ucase):
+                count_u += 1
+            elif (_pw[i] in self.__num):
+                count_n += 1
+
+        count_total = 0
+
+        if (count_l != 0):
+            count_total += 1
+
+        if (count_s != 0):
+            count_total += 1
+
+        if (count_u != 0):
+            count_total += 1
+
+        if (count_n != 0):
+            count_total += 1
+
+        return count_total
+
+
+
+    '''
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃   Database Miscellaneous                                           ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    '''
+
+    def validate_index(self, index=None):
+
+        """
+        Validates whether index or a list of indexes represents
+         record indices in database
+
+        Args:    An int value or a list of integers 
+                             OR
+                 The list which will be used to validate indexes
+
+        Returns: Boolean value indicating whether index/indexes are valid
+
+        Exception: TypeError is raised if there's a data type mismatch
+
+        """
+
+        if (type(index) == int):
+            if (index >= 0 and (index < len(self.__record_list))):
+                return True
+            else:
+                return False
+
+        elif (type(index) == list):
+
+            for i in index:
+                if (not (i >= 0 or (i < len(self.__record_list)))):
+                    return False
+
+            return True
+
+        else:
+            raise TypeError('validate_index(): Needs to be of type int or list')
 
 
     def get_number_of_records(self):
@@ -558,6 +1511,19 @@ class ManageRecord():
         return len(self.__record_list)
 
 
+    def get_record_at_index_with_enc_pw(self, index):
+
+        """
+        Provides the record object at the specified index with enc pw
+
+        Args:    index (int)
+        Returns: (Record)
+
+        """
+
+        return self.__record_list[index]
+
+
     def get_summary(self):
 
         """
@@ -565,6 +1531,9 @@ class ManageRecord():
 
         Presents a summary of records in database for autocompletion 
         when searching.
+
+        Uses:    get_summary() method in Class @Record()
+        Used by: search_bar_show() in @pwmgr
 
         Args:    N/A
 
@@ -576,11 +1545,18 @@ class ManageRecord():
 
         l = []
 
-        for item in self.__record_list:
-            l.append(item.get_summary())
+        for i in range(len(self.__record_list)):
+            l.append(self.__record_list[i].get_summary())
 
         return l
 
+
+    def print_data(self):
+
+        print('Number of records: %d' %len(self.__record_list))
+
+        for i in range(len(self.__record_list)):
+            print(self.__record_list[i])
 
 
     def add(self, item):
@@ -595,9 +1571,8 @@ class ManageRecord():
 
         if (type(item) == Record):
 
-            _pw = self.__encrypt_pw(item.get_password())
             _item = item
-            _item.set_password(_pw)
+            _item.set_password(self.__encrypt_pw(item.get_password_encrypted()))
 
             self.__record_list.append(_item) 
 
@@ -605,16 +1580,15 @@ class ManageRecord():
 
             for record in item:
 
-                _pw = self.__encrypt_pw(record.get_password())
                 _record = record
-                _record.set_password(_pw)
+                _record.set_password(self.__encrypt_pw(record.get_password_encrypted()))
 
                 self.__record_list.append(_record) 
 
         self.sort()
 
 
-    def check_duplicate_entry(self, item):
+    def check_duplicate_entry(self, site):
 
         """
         Searches for duplicate entries & returns boolean value
@@ -626,7 +1600,7 @@ class ManageRecord():
 
         Returns: Boolean
         """
-        result = self.search_website(item.get_website(), partial_match=False)
+        result = self.search_website(site, partial_match=False)
 
         if (len(result) != 0):
             return True
@@ -634,66 +1608,14 @@ class ManageRecord():
             return False
 
 
-    def sort(self, custom_list=None):
+    def sort(self):
 
-        self.__sort_by_website(custom_list)
+        self.__sort_by_website()
 
 
-    def __sort_by_website(self, custom_list=None):
+    def __sort_by_website(self):
 
-        """
-        Sorts records by website name in ascending order
-
-        Args:    Accepts a list of records for sorting. 
-                 If no parameters are passed, sorts the 
-                 inernal list of records
-
-        Returns: If optional parameter was passed returns
-                 the sorted list
-        """
-
-        if (custom_list == None): # Do in place sorting for record in memory,
-                                  # only if no other list is provided as argument
-            if (len(self.__record_list) == 0):
-                return
-
-            while (True):         
-                changes = False
-
-                for i in range(len(self.__record_list)):
-                    j = i+1
-
-                    if (j < len(self.__record_list)):
-                        if (self.__record_list[j].get_website() < self.__record_list[i].get_website()):
-                            tmp = self.__record_list[i]
-                            self.__record_list[i] = self.__record_list[j]
-                            self.__record_list[j] = tmp
-                            changes = True
-
-                if (changes == False):
-                    break
-
-            return
-
-        else:
-
-            while (True):
-                changes = False
-
-                for i in range(len(custom_list)):
-                    j = i+1
-
-                    if (j < len(custom_list)):
-                        if (custom_list[j].get_website() < custom_list[i].get_website()):
-                            tmp = custom_list[i]
-                            custom_list[i] = custom_list[j]
-                            custom_list[j] = tmp
-                            changes = True
-
-                if (changes == False):
-                    break
-
-            return custom_list
+        self.__record_list.sort(key=lambda x : x.get_website())
 
 
     def __sort_by_last_modified(self, custom_list=None):
@@ -736,7 +1658,7 @@ class ManageRecord():
 
                     #print('%s/%s/%s %s:%s' % (j_year, j_month, j_day, j_hr, j_min))
         
-                    j_dt_obj = DateTime(j_year, j_month, j_day, j_hr, j_min)
+                    j_dt_obj = datetime(j_year, j_month, j_day, j_hr, j_min)
         
                     i_last = l_mod[i][0].get_last_modified().split(' ')
                     i_date = i_last[0].split('-')
@@ -750,7 +1672,7 @@ class ManageRecord():
         
                     #print('%s/%s/%s %s:%s' % (i_year, i_month, i_day, i_hr, i_min))
 
-                    i_dt_obj = DateTime(i_year, i_month, i_day, i_hr, i_min)
+                    i_dt_obj = datetime(i_year, i_month, i_day, i_hr, i_min)
         
 
                     if (i_dt_obj < j_dt_obj):
@@ -811,7 +1733,7 @@ class ManageRecord():
                     if (record == self.__record_list[i]):
                         self.__record_list.pop(i)
                         break
-    
+
 
     def update_index(self, record_object, index):
 
@@ -825,7 +1747,7 @@ class ManageRecord():
         """
 
         _record = record_object
-        _pw = self.__encrypt_pw(record_object.get_password())
+        _pw = self.__encrypt_pw(record_object.get_password_encrypted())
         _record.set_password(_pw)
 
         self.__record_list[index] = _record
@@ -1001,7 +1923,7 @@ class ManageRecord():
             search_matches.sort()
             return search_matches
 
-    
+
     def search_all(self, keyword=''):
 
         """
@@ -1031,7 +1953,13 @@ class ManageRecord():
         return search_matches
 
 
-    def format_csv(self):
+    '''
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃   Database Export                                                  ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    '''
+
+    def format_csv(self, include_header=True):
 
         """
         Converts all record entries in database
@@ -1051,277 +1979,19 @@ class ManageRecord():
         #==========================================================
 
         if (len(self.__record_list) == 0):
-            raise DatabaseEmptyException()
+            return []
 
         csv_list = []
 
-        header = 'site,pass,last_modified,email,username,group,remark,two_factor,' + \
-                'recovery_email,phone_number,pw_age,pw_reuse,pw_complexity,security_rating\n'
+        if (include_header):
+            header = 'site,pass,last_modified,email,username,group,remark,two_factor,' + \
+                    'recovery_email,phone_number,pw_age,pw_reuse,pw_complexity,security_rating\n'
+            csv_list.append(header)
 
-        csv_list.append(header)
-        
-        for i in self.__record_list:
-            r = '%s\n' % i.format_csv()
-            csv_list.append(r)
-            #csv_list.append(i.format_csv())
+        for item in self.__record_list:
+            csv_list.append('%s\n' % item.format_csv())
 
         return csv_list
-
-
-    def convert_csvlist_to_record(self, csv_list=[], used_by_load_database=False):
-        
-        """
-        Converts all entries in csv formatted list
-        to a list of Record objects
-
-        Args:    1) A list of str list
-                 2) Boolean value whether this function is called
-                    by the database internally (skips certain operations)
-        
-        Returns: True if operation succeeds or
-                  raises UnsupportedFileFormatException if it fails
-
-        Remarks: We intentionally do not check for duplicates 
-                 as we assume that the user knows what they're doing.
-
-                 * Called by frontend when user is importing a new csv database
-        
-        """
-
-        #TODO: Test this code
-
-        if (len(csv_list) == 0):
-            return
-
-        r_l = len(csv_list[0])
-
-        if (r_l == 2):
-
-            for record in csv_list:
-
-                pw = ''
-
-                if (not used_by_load_database):
-                    pw = self.__encrypt_pw(record[1])
-                else:
-                    pw = record[1]
-
-                record_object = Record(record[0], pw)
-                self.__record_list.append(record_object)
-                self.sort()
-
-            return True
-
-        elif (r_l == 3):
-
-            for record in csv_list:
-
-                pw = ''
-
-                if (not used_by_load_database):
-                    pw = self.__encrypt_pw(record[1])
-                else:
-                    pw = record[1]
-
-                record_object = Record(record[0], pw)
-                record_object.set_username(record[2])
-                self.__record_list.append(record_object)
-                self.sort()
-
-            return True
-
-        elif (r_l == 4):
-
-            for record in csv_list:
-
-                pw = ''
-
-                if (not used_by_load_database):
-                    pw = self.__encrypt_pw(record[1])
-                else:
-                    pw = record[1]
-
-                record_object = Record(record[0], pw)
-                record_object.set_username(record[2])
-                record_object.set_email(record[3])
-                self.__record_list.append(record_object)
-                self.sort()
-
-            return True
-
-        elif (r_l == 5):
-
-            for record in csv_list:
-
-                pw = ''
-
-                if (not used_by_load_database):
-                    pw = self.__encrypt_pw(record[1])
-                else:
-                    pw = record[1]
-
-                record_object = Record(record[0], pw)
-                record_object.set_username(record[2])
-                record_object.set_email(record[3])
-                record_object.set_remark(record[4])
-                self.__record_list.append(record_object)
-                self.sort()
-
-            return True
-
-        elif (r_l == 10):
-
-            for record in csv_list:
-
-                pw = ''
-
-                if (not used_by_load_database):
-                    pw = self.__encrypt_pw(record[1])
-                else:
-                    pw = record[1]
-
-                record_object = Record(record[0], pw, record[2])
-                record_object.set_email(record[3])
-                record_object.set_username(record[4])
-                record_object.set_group(record[5])
-                record_object.set_remark(record[6])
-                record_object.set_two_factor(record[7])
-                record_object.set_recovery_email(record[8])
-                record_object.set_phone_number(record[9])
-                self.__record_list.append(record_object)
-
-            return True
-
-        elif (r_l == 14):
-
-            for record in csv_list:
-
-                pw = ''
-
-                if (not used_by_load_database):
-                    pw = self.__encrypt_pw(record[1])
-                else:
-                    pw = record[1]
-
-                record_object = Record(record[0], pw, record[2])
-                record_object.set_email(record[3])
-                record_object.set_username(record[4])
-                record_object.set_group(record[5])
-                record_object.set_remark(record[6])
-                record_object.set_two_factor(record[7])
-                record_object.set_recovery_email(record[8])
-                record_object.set_phone_number(record[9])
-                record_object.set_pw_age(record[10])
-                record_object.set_pw_reuse(record[11])
-                record_object.set_pw_complexity(record[12])
-                record_object.set_security_rating(record[13])
-                self.__record_list.append(record_object)
-
-            return True
-
-        else:
-            raise UnsupportedFileFormatException('[!] The database format is not supported. ' + \
-                    'Please try exporting database with (--export csv) and importing (--import csv) on a newer version of pwmgr')
-
-            
-    def export_csv(self, filename='data.csv'):
-        
-        """
-        Writes all entries in database into 
-        the specified file in csv format
-
-        Args:    The name of the file
-        
-        Returns: True if the operation succeeds
-                 False if the operation fails
-        """
-
-        header = 'site,pass,last_modified,email,username,group,remark,two_factor,recovery_email,phone_number,pw_age,pw_reuse,pw_complexity,security_rating\n'
-
-        try:
-            with open(filename, 'w') as f:
-
-                f.write(header)
-
-                for i in range(len(self.__record_list)):
-
-                    # r = self.__record_list[i]
-                    r = self.get_index(i)
-
-                    data = '%s\n' % (r.format_csv())
-
-                    f.write(data)
-
-        except (IOError):
-            return False
-
-        return True
-
-
-    def export_csv_brief(self, filename='data.csv'):
-        
-        """
-        Only 'site,pass,username' fields are exported to csv format
-
-        Args:    The name of the file
-        
-        Returns: True if the operation succeeds
-                 False if the operation fails
-        """
-
-        header = 'site,pass,username\n'
-
-        try:
-            with open(filename, 'w') as f:
-
-                f.write(header)
-
-                for i in range(len(self.__record_list)):
-
-                    # r = self.__record_list[i]
-
-                    r = self.get_index(i)
-
-                    s = r.format_field_csv(r.get_website())
-                    p = r.format_field_csv(r.get_password())
-                    u = r.format_field_csv(r.get_username())
-
-                    data = '%s,%s,%s\n' % (s,p,u)
-
-                    f.write(data)
-
-        except (IOError):
-            return False
-
-        return True
-
-
-    def read_csv(self, filename='data.csv'):
-        
-        """
-        Parses a csv formatted file & loads all 
-            information into database
-
-        Args:    The name of the file
-        
-        Returns: True if the operation succeeds
-                 False if the operation fails
-        """
-
-        data = []
-
-        try:
-            with open(filename, 'r') as f:
-                r = reader(f)
-        except (IOError, BaseException):
-            return False
-
-        for row in r:
-            data.append(row)
-            
-        self.convert_csvlist_to_record(data)
-
-        return True
 
 
     def read_csv_in_memory(self, data=''):
@@ -1349,1251 +2019,188 @@ class ManageRecord():
         return tmp
 
 
-    def convert_int_to_hex(self, val=None, decimal_places=4):
+    def convert_csvlist_to_record(self, csv_list=[], used_by_load_database=False):
 
         """
-        Converts int to hex without regular 0x part
+        Converts all entries in csv formatted list
+        to a list of Record objects
 
-        Args:      1) Integer value (int)
-                   2) The number of decimal places 
+        Args:    1) A list of str list
+                 2) Boolean value whether this function is called
+                    by the database internally (skips certain operations)
 
-        Returns:   (str)
+        Returns: True if operation succeeds or
+                  raises UnsupportedFileFormatException if it fails
 
-        Exception: ValueError() if the input parameter is 
-                   not of type int
-        """
-        if (type(val) == int):
-            s = str(hex(val))[2:].zfill(decimal_places)
-            return s
-        else:
-            raise ValueError('Expected integer value')
-    
+        Remarks: We intentionally do not check for duplicates
+                 as we assume that the user knows what they're doing.
 
-    def convert_hex_to_int(self, val=None):
-        """
-        Converts hex from integer
-
-        Args:      Hexadecimal value (str)
-
-        Returns:   (int)
-
-        Exception: ValueError() if the input parameter is 
-                   not of type str
-        """
-    
-        if (type(val) == str):
-            i = int(val, 16)
-            return i
-        else:
-            raise ValueError('Expected str in hex / base 16 format')
-
-
-    def generate_new_key(self, password='', generate_salt=True,
-            update_enc_key=True, path_to_keyfile=''):
+                 * Called by frontend when user is importing a new csv database
 
         """
-        Uses a combination of salt and input password to 
-        generate a new key. Both the salt and encryption
-        keys are automatically updated internally when
-        they are generated if the 3rd parameter is True.
 
-        In situations for example when loading the file,
-        the salt is already present so the 2nd parameter 
-        can be set to false in order to generate new key 
-        from user password.
-
-        Args:       1) The password to use to derive the key (str)
-                    2) Whether to generate a new salt (bool)
-                    3) Whether to update_enc_key or just return the new key (bool)
-                    4) Path to key file, if you want to use combine it with
-                       master password to strengthen key. (Default: null)
-
-        Returns:    The generated key if 3rd parameter is True, otherwise
-                    updates internal master key 
-
-        Exceptions: N/A
-        """
-
-        if (password == ''):
-            print("generate_new_key(): Requires a password to generate new key")
+        if (len(csv_list) == 0):
             return
 
-        # Generating new salt, if one doesn't already exist
-        if (generate_salt):
-            # Used for database encryption
-            self.__salt_1 = os.urandom(self.__salt_length) 
+        r_l = len(csv_list[0])
 
-        key = ''
+        if (r_l not in [2,3,4,5,10,14]):
+            raise UnsupportedFileFormatException('[!] The database format is not supported')
 
-        if (path_to_keyfile == ''):
 
-            kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
-                    length=32, salt=self.__salt_1, iterations=1000000)
+        if (r_l == 2):
 
-            key = base64.urlsafe_b64encode(\
-                    kdf.derive(bytes(password, 'utf-8')))
+            for record in csv_list:
 
-            #print("Key: %s\tSalt: %s" % (key, self.__salt_1))
-        else:
+                pw = ''
 
-            kf_data = ''
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
 
-            with open(path_to_keyfile, 'rb') as fh:
-                kf_data = fh.read()
+                record_object = Record(record[0], pw)
+                self.__record_list.append(record_object)
 
-            if (len(kf_data) < 2048):
-                raise KeyFileInvalidException()
+        elif (r_l == 3):
 
-            kf_data = kf_data + bytes(password, 'utf-8')
+            for record in csv_list:
 
-            kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
-                    length=32, salt=self.__salt_1, iterations=1000000)
+                pw = ''
 
-            key = base64.urlsafe_b64encode(kdf.derive(kf_data))
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
 
-        if (update_enc_key):
-            self.__encryption_key_1 = key
-            self.generate_new_key_2()
-        else:
-            return key.decode('utf-8')
-        
+                record_object = Record(record[0], pw)
+                record_object.set_username(record[2])
+                self.__record_list.append(record_object)
 
-    def change_password(self, new_password=''):
+        elif (r_l == 4):
 
-        """
-        Generates new salt and derives a new key based on the 
-        new password. Re-encrypts database with new key.
+            for record in csv_list:
 
-        Args:    The new password to use to encrypt the database
-        
-        Returns: Boolean value indicating success / failure
-        """
+                pw = ''
 
-        old_key_2 = self.__encryption_key_2
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
 
-        self.__master_password = new_password
-        self.generate_new_key(new_password, True)
+                record_object = Record(record[0], pw)
+                record_object.set_username(record[2])
+                record_object.set_email(record[3])
+                self.__record_list.append(record_object)
 
-        self.generate_new_key_2()
-        new_key_2 = self.__encryption_key_2
+        elif (r_l == 5):
 
-        self.__migrate_all_pw_from_old_to_new_key(old_key_2, new_key_2)
+            for record in csv_list:
 
+                pw = ''
 
-    def use_keyfile(self, pw, path_to_keyfile=''):
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
 
-        old_key_2 = self.__encryption_key_2
+                record_object = Record(record[0], pw)
+                record_object.set_username(record[2])
+                record_object.set_email(record[3])
+                record_object.set_remark(record[4])
+                self.__record_list.append(record_object)
 
-        self.__master_password = pw
-        self.generate_new_key(pw, True, True, path_to_keyfile)
+        elif (r_l == 10):
 
-        self.generate_new_key_2()
-        new_key_2 = self.__encryption_key_2
+            for record in csv_list:
 
-        self.__migrate_all_pw_from_old_to_new_key(old_key_2, new_key_2)
+                pw = ''
 
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
 
-    def remove_keyfile(self, pw):
+                record_object = Record(record[0], pw, record[2])
+                record_object.set_email(record[3])
+                record_object.set_username(record[4])
+                record_object.set_group(record[5])
+                record_object.set_remark(record[6])
+                record_object.set_two_factor(record[7])
+                record_object.set_recovery_email(record[8])
+                record_object.set_phone_number(record[9])
+                self.__record_list.append(record_object)
 
-        old_key_2 = self.__encryption_key_2
+        elif (r_l == 14):
 
-        self.__master_password = pw
-        self.generate_new_key(pw, True, True, '')
-    
-        self.generate_new_key_2()
-        new_key_2 = self.__encryption_key_2
+            for record in csv_list:
 
-        self.__migrate_all_pw_from_old_to_new_key(old_key_2, new_key_2)
+                pw = ''
 
+                if (not used_by_load_database):
+                    pw = self.__encrypt_pw(record[1])
+                else:
+                    pw = record[1]
 
-    def generate_hash(self, input_str):
-        
-        """
-        Returns a sha256 hash digest value of the input string
-
-        Args:       A byte encoded string
-
-        Returns:    (str)
-        """
-    
-        if (type(input_str) != bytes):
-            raise TypeError('generate_hash(): first parameter needs to be of type bytes')
-    
-        s = sha256(input_str)
-    
-        hash_value = s.hexdigest()
-    
-        return hash_value
-
-
-    def __encrypt_pw(self, pw, enc_key=''):
-
-        """
-        Encrypts the input pw & return it in str form
-        
-        As it will be in memory & used by db for various str operations, 
-        we convert it to a str instead of byte form. That way it also complies 
-        with the rules of existing interface
-        """
-
-        fernet_handler = ''
-
-        if (enc_key == ''):
-            fernet_handler = Fernet(self.__encryption_key_2)
-        else:
-            fernet_handler = Fernet(enc_key)
-
-        _pw = fernet_handler.encrypt(bytes(pw, 'utf-8')).decode()
-
-        return _pw
-
-
-    def generate_new_key_2(self, key='', update_enc_key=True):
-
-        if (self.__salt_2 == ''):
-            self.__salt_2 = os.urandom(self.__salt_length) 
-
-        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), \
-                length=32, salt=self.__salt_2, iterations=1000000)
-
-        _key = ''
-
-        if (key == ''):
-            _key = self.__encryption_key_1
-        else:
-            _key = key
-
-        if (type(_key) != bytes):
-            _key = bytes(_key, 'utf-8')
-
-        if (update_enc_key):
-            self.__encryption_key_2 = base64.urlsafe_b64encode(kdf.derive(_key))
-        else:
-            return base64.urlsafe_b64encode(kdf.derive(_key))
-
-
-    def __migrate_all_pw_from_old_to_new_key(self, old_key='', new_key=''):
-
-        if (old_key == '' or new_key == ''):
-            raise InvalidParameterException('migrate_all_pw_from_old_to_new_key():' + \
-                ' encryption keys cannot be empty')
-
-        for i in range(len(self.__record_list)):
-
-            pw = self.get_pw_of_index(i, old_key)
-
-            self.__record_list[i].set_password(self.__encrypt_pw(pw, new_key))
-
-
-    def __encrypt_database_in_memory(self):
-
-        """
-        Encrypts database with key and updates internal variable 
-        (self.__encryption_key_1) which stores an encrypted
-        byte string representation of database
-
-        Args:      N/A
-        
-        Returns:   N/A
-
-        Exception: N/A
-        """
-
-        data = self.format_csv()
-
-        # We don't include index 0, cos we want to discard csv header from
-        # encrypted database
-        record_string = '%s' % (data[1])
-        
-        if (len(data) > 2):
-            for record in data[2:]: 
-                record_string = '%s%s' % (record_string, record) 
-
-        data_bytes = bytes(record_string, 'utf-8')
-
-        fernet_handler = Fernet(self.__encryption_key_1)
-        encrypted_data = fernet_handler.encrypt(data_bytes)
-
-        self.__encrypted_data = encrypted_data
-
-
-    def write_encrypted_database(self, filename='data.bin'):
-
-        """
-        Responsible for encryption of database
-
-        Args:       The name of the regular encryted file. (Default: 'data.bin')
-
-        Returns:    Boolean value indicating whether the operation succeeded or not.
-
-        Exceptions: 1) NoKeyFoundException() if a new key hasn't been generated
-                    2) IOError(): If an error occured while reading/writing file
-
-        """
-
-        if (self.__encryption_key_1 == '' or self.__salt_1 == '' or \
-                self.__encryption_key_2 == '' or self.__salt_2 == ''):
-            # This exception like won't occur as frontend will make sure that
-            # the key has been initialized first before calling this function, 
-            # but it is kept as a safety measure in case this library 
-            # is used by other programs or for testing
-            raise NoKeyFoundException('Need to initialize key first, ' + \
-                    'call generate_new_key() function')
-
-        if (len(self.__record_list) != 0):
-
-            #---------------------------------------#
-            #          Writing regular file         #
-            #---------------------------------------#
-            # 03 | hash | salt-1 | salt-2 | data    #
-            #---------------------------------------#
-
-            file_type = '03'
-
-            self.__encrypt_database_in_memory()
-
-            encrypted_hash = self.generate_hash((bytes(file_type, 'utf-8') + \
-                    self.__salt_1 + self.__salt_2 + self.__encrypted_data))
-
-            try:
-                with open(filename, 'wb') as file_handler:
-                    file_handler.write(bytes(file_type, 'utf-8'))
-                    file_handler.write(bytes(encrypted_hash, 'utf-8'))
-                    file_handler.write(self.__salt_1)
-                    file_handler.write(self.__salt_2)
-                    file_handler.write(self.__encrypted_data)
-                    return True
-            except IOError:
-                print("write_encrypted_database(): error#1 occured while writing database")
-                return False
-
-        else: 
-
-            #---------------------------------------------#
-            #   Writing hash & salt with empty database   #
-            #---------------------------------------------#
-            # 04 | hash | salt-1 | salt-2                 #
-            #---------------------------------------------#
-
-            file_type = '04' 
-
-            encrypted_hash = self.generate_hash((bytes(file_type, 'utf-8') + \
-                    self.__salt_1 + self.__salt_2))
-
-            try:
-                with open(filename, 'wb') as file_handler:
-                    file_handler.write(bytes(str(file_type), 'utf-8'))
-                    file_handler.write(bytes(encrypted_hash, 'utf-8'))
-                    file_handler.write(self.__salt_1)
-                    file_handler.write(self.__salt_2)
-                    return True
-            except IOError:
-                print("write_encrypted_database(): error#2 occured while writing database")
-                return False
-
-
-    def load_database(self, filename='data.bin', password='',
-            override_integrity_check=False, path_to_keyfile=''):
+                record_object = Record(record[0], pw, record[2])
+                record_object.set_email(record[3])
+                record_object.set_username(record[4])
+                record_object.set_group(record[5])
+                record_object.set_remark(record[6])
+                record_object.set_two_factor(record[7])
+                record_object.set_recovery_email(record[8])
+                record_object.set_phone_number(record[9])
+                record_object.set_pw_age(record[10])
+                record_object.set_pw_reuse(record[11])
+                record_object.set_pw_complexity(record[12])
+                record_object.set_security_rating(record[13])
+                self.__record_list.append(record_object)
+
+
+        self.sort()
+        return True
+
+
+    ## Optimize code
+    def export_csv(self, filename='data.csv'):
         
         """
-        Attempts to load database from specified path (filename)
+        Writes all entries in database into 
+        the specified file in csv format
 
-        Args: Specify path to the database 
-
-        Returns: Boolean value indicating success / failure
-
-        Exceptions:
-
-            1) InvalidParameterException() if any of
-                the input parameters are missing or invalid
-            2) DatabaseFileNotFoundException() if the
-               database file doesn't exist & load_database()
-               function is called.
-            3) IOError() if an error occurs while reading file
-            4) IncorrectPasswordException() if password
-               for decrypting data is not correct
-            5) UnsupportedFileFormatException() if an older or 
-               unsupported format was detected
-            6) IntegrityCheckFailedException() if the calculated
-               hash of the encrypted data doesn't match with
-               the one stored
+        Args:    The name of the file
+        
+        Returns: True if the operation succeeds
+                 False if the operation fails
         """
 
-        ## Debug
-        #st1 = time()
-
-        ## Some of the parameter checks are not required as it is handled
-        ## by frontend, but its still placed in here as a safety measure 
-        ## in case this library is used by other programs.
-
-        if (password == ''):
-            raise InvalidParameterException("load_database(): key parameter cannot be empty")
-
-        if (not os.path.isfile(filename)): 
-            raise DatabaseFileNotFoundException("load_database(): File: %s does't exist" % filename)
-
-        file_type = ''
+        header = 'site,pass,last_modified,email,username,group,remark,two_factor,recovery_email,phone_number,pw_age,pw_reuse,pw_complexity,security_rating\n'
 
         try:
-            fh = open(filename, 'rb')
+            with open(filename, 'w') as f:
 
-            file_type = fh.read(2)
+                f.write(header)
 
-        except IOError:
-            fh.close()
-            raise IOError("load_database(): error#01 occured while reading database")
+                for i in range(len(self.__record_list)):
 
-        msg = "\nUnsupported file format detected!\n\n" + \
-                "1) Run '--export csv-brief data.csv' on older version of pwmgr < 2.0\n" + \
-                "2) Backup & remove ~/.config/pwmgr/data.bin\n" + \
-                "3) Run '--import data.csv' on latest version of pwmgr >= 2.0\n"
+                    r = self.__record_list[i]
+                    r.set_password(self.get_pw_of_index(i))
 
-        if (file_type.decode('utf-8') == '01'):
-            raise UnsupportedFileFormatException(msg)
+                    data = '%s\n' % (r.format_csv())
 
-        elif (file_type.decode('utf-8') == '02'):
-            raise UnsupportedFileFormatException(msg)
+                    f.write(data)
 
-        elif (file_type.decode('utf-8') == '03'):
-
-            #---------------------------------------#
-            # File with data                        #
-            #---------------------------------------#
-            # 03 | hash | salt-1 | salt-2 | data    #
-            #---------------------------------------#
-
-            try:
-                loaded_hash = fh.read(self.__hash_length)
-                self.__salt_1 = fh.read(self.__salt_length)
-                self.__salt_2 = fh.read(self.__salt_length)
-                self.__encrypted_data = fh.read()
-                fh.close()
-            except IOError:
-                fh.close()
-                raise IOError("load_database(): error#02 occured while reading database")
-
-            generated_hash = self.generate_hash((file_type + self.__salt_1 + self.__salt_2 + self.__encrypted_data))
-
-            if (loaded_hash.decode('utf-8') != generated_hash):
-
-                if (override_integrity_check):
-                    pass
-                else:
-                    raise IntegrityCheckFailedException()
-
-            self.generate_new_key(password, False, True, path_to_keyfile)
-
-            fernet_handler = Fernet(self.__encryption_key_1)
-
-            try:
-                decrypted = (fernet_handler.decrypt(self.__encrypted_data)).decode('utf-8')
-            except InvalidToken:
-                raise IncorrectPasswordException()
-
-            ## Debug
-            #st4 = time()
-            #print("decrypted data(), time taken: %.3fs" % (st4-st3))
-
-            self.__master_password = password
-
-            data_list = self.read_csv_in_memory(decrypted)
-
-            ## Debug
-            #st5 = time()
-            #print("read_csv_in_memory(), time taken: %.3fs" % (st5-st4))
-
-            self.convert_csvlist_to_record(data_list, True)
-
-            ## Debug
-            #st6 = time()
-            #print("convert_csvlist_to_record(), time taken: %.3fs" % (st6-st5))
-            #print("Total time taken: %.3fs" % (st6-st1))
-
-
-            ## This function is good but it has been archived, we dont wanna
-            ##    leak any information in memory
-
-            """
-            ## Checking whether we can decrypt pw field
-            if (len(self.__record_list) != 0):
-                try:
-                    self.get_pw_of_index(0)
-                except (IncorrectPasswordException):
-                    raise PWDecryptionFailedException()
-
-            """
-
-            return True
-
-        elif (file_type.decode('utf-8') == '04'):
-
-            #---------------------------------------#
-            # Empty database                        #
-            #---------------------------------------#
-            # 04 | hash | salt-1 | salt-2           #
-            #---------------------------------------#
-
-            try:
-                loaded_hash = fh.read(self.__hash_length)
-                self.__salt_1 = fh.read(self.__salt_length)
-                self.__salt_2 = fh.read(self.__salt_length)
-                fh.close()
-            except IOError:
-                fh.close()
-                raise IOError("load_database(): error#03 occured while reading database")
-            
-            generated_hash = self.generate_hash((file_type + self.__salt_1 + self.__salt_2))
-
-            if (loaded_hash.decode('utf-8') != generated_hash):
-
-                if (override_integrity_check):
-                    pass
-                else:
-                    raise IntegrityCheckFailedException()
-
-            self.generate_new_key(password, False, True, path_to_keyfile)
-
-            return True
-
-        else:
-
-            try:
-                fh.close()
-            except IOError:
-                pass
-            
-            raise UnsupportedFileFormatException()
-
-
-    def load_database_key(self, filename='data.bin', key='', override_integrity_check=False):
-        
-        """
-        Attempts to load database from specified path (filename) using key
-
-        Args: Specify path to the database 
-
-        Returns: Boolean value indicating success / failure
-
-        Exceptions:
-
-            1) InvalidParameterException() if any of
-                the input parameters are missing or invalid
-            2) DatabaseFileNotFoundException() if the
-               database file doesn't exist & load_database()
-               function is called.
-            3) IOError() if an error occurs while reading file
-            4) IncorrectPasswordException() if password
-               for decrypting data is not correct
-            5) UnsupportedFileFormatException() if an older or 
-               unsupported format was detected
-            6) IntegrityCheckFailedException() if the calculated
-               hash of the encrypted data doesn't match with
-               the one stored
-        """
-
-        ## Some of the parameter checks are not required as it is handled
-        ## by frontend, but its still placed in here as a safety measure 
-        ## in case this library is used by other programs.
-
-        ## Debug
-        #st1 = time()
-
-        if (key == ''):
-            raise InvalidParameterException("load_database_key(): key parameter cannot be empty")
-        else:
-            self.__encryption_key_1 = key
-
-        if (os.path.isfile(filename) == False): 
-            raise DatabaseFileNotFoundException("load_database_key(): File: %s does't exist" % filename)
-
-        try:
-            fh = open(filename, 'rb')
-
-            file_type = fh.read(2)
-
-        except IOError:
-            fh.close()
-            raise IOError("load_database_key(): error#01 occured while reading database")
-
-        msg = "\nUnsupported file format detected!\n\n" + \
-                "1) Run '--export csv-brief data.csv' on older version of pwmgr < 2.0\n" + \
-                "2) Backup & remove ~/.config/pwmgr/data.bin\n" + \
-                "3) Run '--import data.csv' on latest version of pwmgr >= 2.0\n"
-
-        if (file_type.decode('utf-8') == '01'):
-            raise UnsupportedFileFormatException(msg)
-
-        elif (file_type.decode('utf-8') == '02'):
-            raise UnsupportedFileFormatException(msg)
-
-        elif (file_type.decode('utf-8') == '03'):
-
-            #---------------------------------------#
-            # Regular file with data                #
-            #---------------------------------------#
-            # 03 | hash | salt-1 | salt-2 | data    #
-            #---------------------------------------#
-
-            try:
-                loaded_hash = fh.read(self.__hash_length)
-                self.__salt_1 = fh.read(self.__salt_length)
-                self.__salt_2 = fh.read(self.__salt_length)
-                self.__encrypted_data = fh.read()
-                fh.close()
-
-            except IOError:
-                fh.close()
-                raise IOError("load_database_key(): error#02 occured while reading database")
-
-            generated_hash = self.generate_hash((file_type + self.__salt_1 + self.__salt_2 + self.__encrypted_data))
-
-            if (loaded_hash.decode('utf-8') != generated_hash):
-
-                if (override_integrity_check):
-                    pass
-                else:
-                    raise IntegrityCheckFailedException()
-
-            self.generate_new_key_2()
-
-            fernet_handler = Fernet(self.__encryption_key_1)
-
-            try:
-                decrypted = (fernet_handler.decrypt(self.__encrypted_data)).decode('utf-8')
-            except InvalidToken:
-                raise IncorrectKeyException()
-
-            ## Debug
-            #st3 = time()
-            #print("decrypted data, time taken: %.3fs" % (st3-st2))
-
-            data_list = self.read_csv_in_memory(decrypted)
-
-            ## Debug
-            #st4 = time()
-            #print("read_csv_in_memory(), time taken: %.3fs" % (st4-st3))
-
-            self.convert_csvlist_to_record(data_list, True)
-
-            
-            ## This function is good but it has been archived, we dont wanna
-            ##    leak any information in memory
-            """
-            if (len(self.__record_list) != 0):
-                try:
-                    self.get_pw_of_index(0)
-                except (IncorrectPasswordException):
-                    msg = 'load_database_key(): Unable to decrypt encrypted password for a record' + \
-                            ' due to corrupted data' 
-                    raise PWDecryptionFailedException(msg)
-            """
-
-            ## Debug
-            #st5 = time()
-            #print("convert_csvlist_to_record(), time taken: %.3fs" % (st5-st4))
-            #print("Total time taken: %.3fs" % (st5-st1))
-
-            return True
-
-        elif (file_type.decode('utf-8') == '04'):
-
-            #---------------------------------------#
-            # Empty database                        #
-            #---------------------------------------#
-            # 04 | hash | salt-1 | salt-2           #
-            #---------------------------------------#
-
-            try:
-                loaded_hash = fh.read(self.__hash_length)
-                self.__salt_1 = fh.read(self.__salt_length)
-                self.__salt_2 = fh.read(self.__salt_length)
-                fh.close()
-            except IOError:
-                fh.close()
-                raise IOError("load_database_key(): error#03 occured while reading database")
-            
-            generated_hash = self.generate_hash(file_type + self.__salt_1 + self.__salt_2)
-
-            if (loaded_hash.decode('utf-8') != generated_hash):
-
-                if (override_integrity_check):
-                    pass
-                else:
-                    raise IntegrityCheckFailedException()
-
-            self.generate_new_key_2()
-
-            return True
-
-        else:
-
-            try:
-                fh.close()
-            except IOError:
-                pass
-            
-            raise UnsupportedFileFormatException()
-
-
-
-    #===========================================================================
-    #                       Password Auditing Functions                        #
-    #===========================================================================
-
-    # [x] Tested
-    def audit_security(self):
-
-        ## Combining pw_reuse & pw_complexity otherwise we'd run into memory enc errors
-        ##      due to the way this enc library functions
-
-        self.audit_pw_age_all()
-        self.audit_pw_reuse_and_cmp_all()
-        self.rate_overall_security()
-
-
-    # [x] Tested
-    def sort_security_rating(self, sort_ascending=True):
-
-        """
-        Sorts records by security ratings in ascending or descending order based 
-        on the paramter that has been set. Need to call audit_security() first before 
-        calling this function.
-
-        Ratings: 
-
-        (14-15) : Outstanding
-        (12-13) : Good
-        (10-11) : Average
-        (7-9)   : Poor
-        (0-6)   : Critical
-        
-        Returns:  List of record indexes sorted in (ascending/descending order) 
-                  based on overall security rating
-
-        """
-
-        if (len(self.__record_list) == 0):
-            return []
-
-        sorted_indexes = []
-
-        # Removing unavailable ratings
-        for i in range(0, len(self.__record_list)):
-
-            if (self.__record_list[i].get_security_rating() != ''):
-                sorted_indexes.append(i)
-
-        if (sort_ascending):
-
-            while (True):
-
-                index_moved = False
-
-                for i in range(0, len(sorted_indexes)-1):
-
-                    rt1 = int(self.__record_list[sorted_indexes[i]].get_security_rating())
-                    rt2 = int(self.__record_list[sorted_indexes[i+1]].get_security_rating())
- 
-                    if (rt1 > rt2):
-                        tmp_index = sorted_indexes[i+1]
-                        sorted_indexes[i+1] = sorted_indexes[i]
-                        sorted_indexes[i] = tmp_index
-                        index_moved = True
-
-                if (not index_moved):
-                    break
-        else:
-
-            while (True):
-
-                index_moved = False
-
-                for i in range(0, len(sorted_indexes)-1):
-                    rt1 = int(self.__record_list[sorted_indexes[i]].get_security_rating())
-                    rt2 = int(self.__record_list[sorted_indexes[i+1]].get_security_rating())
- 
-                    if (rt1 < rt2):
-                        tmp_index = sorted_indexes[i+1]
-                        sorted_indexes[i+1] = sorted_indexes[i]
-                        sorted_indexes[i] = tmp_index
-                        index_moved = True
-
-                if (not index_moved):
-                    break
-
-        return sorted_indexes
-        
-
-    # [x] Tested, Initial testing done. More testing needed
-    def rate_overall_security(self):
-
-        """
-        Rates overall security posture of all records in database
-
-            Ratings: 
-
-            pw_age (3):          'n' =  3, 'o' =  2, 'r' = -1
-            pw_reuse (6):        '0' =  6, '1' =  0
-            pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
-            ___________________________________________________________________________
-            Total score (15):    max = 15, min = 0 (negative values are set to 0)
-
-        """
-
-        if (len(self.__record_list) == 0):
-            return []
-
-        for i in range(len(self.__record_list)):
-
-            r = self.__record_list[i]
-
-            rating_age = 0
-            rating_reuse = 0
-            rating_complexity = 0
-            rating_total = 0
-
-            pw_age = r.get_pw_age()
-
-            if (pw_age == 'n'):
-                rating_age = 3
-            elif (pw_age == 'o'):
-                rating_age = 2
-            elif (pw_age == 'r'):
-                rating_age = -1
-            else: # Skipping rating if there's errors with last_modified attribute
-                continue
-
-            pw_reuse = r.get_pw_reuse()
-
-            if (pw_reuse == '0'):
-                rating_reuse = 6
-            elif (pw_age == '1'):
-                rating_reuse = 0
-
-            #pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
-
-            pw_complexity = r.get_pw_complexity()
-
-            if (pw_complexity == 'e'):
-                rating_complexity = 6
-            elif (pw_complexity == 'g'):
-                rating_complexity = 4
-            elif (pw_complexity == 'a'):
-                rating_complexity = 2
-            elif (pw_complexity == 'w'):
-                rating_complexity = -2
-            elif (pw_complexity == 'u'):
-                rating_complexity = -4
-
-            rating_total = rating_age + rating_reuse + rating_complexity
-
-            if (rating_total < 0):
-                rating_total = 0
-
-            rating_str = '%d' % (rating_total)
-
-            self.__record_list[i].set_security_rating(rating_str)
-
-
-    # [x] Tested
-    def audit_pw_age_all(self):
-
-        """
-        Audits records to check if they exceed the desired password age,
-            & stores audit information within each record
-
-        Returns: 5 lists 
-                 
-                 1) List of record indexes whose last modified value
-                    is blank / not updated.
-                    (This could be because after importing from another 
-                    password manager datebase, the user didn't change 
-                    the password.)
-
-                 2) List of record indexes whose last modified value
-                    is probably incorrect as it points to somewhere 
-                    in the future
-
-                 3) List of record indexes whose password age 
-                    is < 6 months & don't need to be changed
-
-                 4) List of record indexes whose password age
-                    is >= 6 months to < 1 year old. 
-
-                 5) List of record indexes whose password age
-                    is >= 1 year and the user would be recommended
-                    to change it.
-        """
-
-        lm_not_updated = []
-        lm_err = []
-        pw_reset_not_needed = []
-        pw_reset_optional = []
-        pw_reset_recommended = []
-
-        day_today = DateTime.today()
-
-        days_this_year = 365
-        half_year = 181
-
-        if (self.is_year_leap_year(day_today.year)):
-            days_this_year = 366
-
-        for i in range(len(self.__record_list)):
-
-            lm = self.__record_list[i].get_last_modified()
-
-            if (lm == ''):
-                lm_not_updated.append(i)
-                continue
-
-            date = lm.split(' ')[0]
-            time = lm.split(' ')[1]
-
-            day = int(date.split('-')[0])
-            month = int(date.split('-')[1])
-            yr = int(date.split('-')[2])
-
-            hr = int(time.split(':')[0])
-            minute = int(time.split(':')[1])
-
-            days_of_past = DateTime(yr, month, day, hr, minute)
-
-            if (days_of_past > day_today):
-                lm_err.append(i)
-                continue
-
-            num_days = (day_today-days_of_past).days
-
-            if (num_days < half_year):
-                pw_reset_not_needed.append(i)
-            elif (num_days < days_this_year):
-                pw_reset_optional.append(i)
-            else:
-                pw_reset_recommended.append(i)
-
-        for i in pw_reset_not_needed:
-            self.__record_list[i].set_pw_age('n')
-        
-        for i in pw_reset_optional:
-            self.__record_list[i].set_pw_age('o')
-
-        for i in pw_reset_recommended:
-            self.__record_list[i].set_pw_age('r')
-
-        return lm_not_updated, lm_err, \
-                pw_reset_not_needed, pw_reset_optional, \
-                pw_reset_recommended
-
-
-    def audit_pw_age_single_record(self, chosen_index=-1):
-
-        """
-        Audits records to check if they exceed the desired password age,
-            & stores audit information within each record
-
-        * If there's any errors, for example last modified is missing,
-            (which probably won't happen) pw_age attribute is set to 'e'
-
-        Returns: None
-
-
-        """
-
-        if (chosen_index == -1):
-            raise InvalidParameterException('audit_pw_age_single_record(): Index parameter cannot be empty')
-
-        day_today = DateTime.today()
-
-        days_this_year = 365
-        half_year = 181
-
-        if (self.is_year_leap_year(day_today.year)):
-            days_this_year = 366
-
-        lm = self.__record_list[chosen_index].get_last_modified()
-
-        if (lm == ''):
-            self.__record_list[i].set_pw_age('e')
-            return
-
-        date = lm.split(' ')[0]
-        time = lm.split(' ')[1]
-
-        day = int(date.split('-')[0])
-        month = int(date.split('-')[1])
-        yr = int(date.split('-')[2])
-
-        hr = int(time.split(':')[0])
-        minute = int(time.split(':')[1])
-
-        days_of_past = DateTime(yr, month, day, hr, minute)
-
-        if (days_of_past > day_today):
-
-            ## 'e' metric is used for errors, usually we won't get this
-            self.__record_list[chosen_index].set_pw_age('e')
-            return 'e'
-
-        num_days = (day_today-days_of_past).days
-
-        if (num_days < half_year):
-            self.__record_list[chosen_index].set_pw_age('n')
-            return 'n'
-        elif (num_days < days_this_year):
-            self.__record_list[chosen_index].set_pw_age('o')
-            return 'o'
-        else:
-            self.__record_list[chosen_index].set_pw_age('r')
-            return 'r'
-
-
-    def is_year_leap_year(self, y=0):
-
-        if (y <= 0):
+        except (IOError):
             return False
 
-        if (y % 4 != 0):
-            return False
-        else:
-
-            if (y % 100 != 0):
-                return True
-            else:
-
-                if (y % 400 == 0):
-                    return True
-                
-                return False
+        return True
 
 
-    # [x] Tested
-    def audit_pw_reuse_and_cmp_all(self):
-
-        """
-        Audits records to see if any of them reuse the same password & the pw complexity
-    
-        Returns: None
-        """
-
-        rec_len = len(self.__record_list)
-
-        ## PW Reuse Calculations
-        if (rec_len == 0):
-            return 
-        elif (rec_len == 1):
-            self.__record_list[0].set_pw_reuse('0')
-        else:
-
-            reuse_pw_indexes_l = []
-
-            pw_list = []
-
-            for i in range(rec_len):
-                pw_list.append(self.get_pw_of_index(i))
-
-            for i in range(0, rec_len):
-                
-                if (i in reuse_pw_indexes_l):
-                    continue
-
-                pw1 = pw_list[i]
-
-                match = False
-
-                for j in range(0, rec_len):
-
-                    if (j==i or j in reuse_pw_indexes_l):
-                        continue
-
-                    pw2 = pw_list[j]
-
-                    if (pw1 == pw2):
-                        match = True
-                        reuse_pw_indexes_l.append(j)
-
-                if (match):
-                    reuse_pw_indexes_l.append(i)
-
-            reuse_pw_indexes_l = list(set(reuse_pw_indexes_l))
-
-            for i in range(0, rec_len):
-
-                if (i not in reuse_pw_indexes_l):
-                    self.__record_list[i].set_pw_reuse('0')
-                else:
-                    self.__record_list[i].set_pw_reuse('1')
-
-        ## PW Complexity calculations
-        for i in range(0, rec_len):
-
-            self.__record_list[i].set_pw_complexity(self.audit_pw_complexity(pw_list[i]))
-
-
-    # [x] Tested
-    def audit_pw_complexity(self, pw=''):
-
-        """
-        Rates password complexity of the input password.
-    
-        Rating level: 
-    
-            4 character classes (upper, lower, symbols, digits)
-    
-            Rating: u,w,a,g,e where u=unsuitable, w=weak, a=avg, g=good, e=excellent
-    
-                    Unsuitable: Covers only 1 class
-    
-                    Weak: Covers 2 classes
-    
-                    Average: 
-                        1) Covers 3 classes
-                        2) Length >= 8 characters otherwise downgraded to weak rating
-                           if only (1) is met
-    
-                    Good:
-                        1) Covers all 4 classes
-                        2) Length >= 10 characters, otherwise downgraded to average rating 
-                           if only (1,2) are met
-    
-                    Excellent: 
-                        1) Covers all 4 classes
-                        2) No character belonging to any character class is repeated consecutively
-                           e.g: '9W@0KZ9<[#TrS' -> not valid
-                                '9W@0kZ9<[#TrS' -> valid
-                        3) Length >= 15 characters, otherwise downgraded to good rating 
-                           if only (1,2) are met
-    
-        """
-    
-        pw_len = len(pw)
-    
-        n_chr_classes = self.check_num_chr_classes(pw)
-    
-        if (n_chr_classes == 1):
-            return 'u'
-        elif (n_chr_classes == 2):
-            return 'w'
-        elif (n_chr_classes == 3): 
-            if (pw_len < 8):
-                return 'w'
-            else:
-                return 'a'
-        elif (n_chr_classes == 4):
-            if (pw_len < 10):
-                return 'a'
-            else:
-                if (pw_len < 15 or self.check_consecutive_class_chr_repeat(pw)):
-                    return 'g'
-                else:
-                    return 'e'
-    
-    
-    def check_num_chr_classes(self, pw=''):
-    
-        """
-        Returns the number of character classes that are present in a password  
-       
-        """
-
-        _pw = list(pw)
-    
-        count_l = 0
-        count_s = 0
-        count_u = 0
-        count_n = 0
-    
-        for i in range(len(_pw)):
-    
-            if (_pw[i] in self.__lcase):
-                count_l += 1
-            elif (_pw[i] in self.__symbols):
-                count_s += 1
-            elif (_pw[i] in self.__ucase):
-                count_u += 1
-            elif (_pw[i] in self.__num):
-                count_n += 1
-            
-        count_total = 0
-    
-        if (count_l != 0):
-            count_total += 1
-    
-        if (count_s != 0):
-            count_total += 1
-    
-        if (count_u != 0):
-            count_total += 1
-
-        if (count_n != 0):
-            count_total += 1
-
-        return count_total
-    
-    
-    def check_consecutive_class_chr_repeat(self, pw=''):
-    
-        """
-        Check whether characters belonging to the same class are repeated 
-        consecutively in a password
-    
-        Returns: Boolean
-    
-                 True if found
-                 False if not found
-        """
-
-        if (len(pw) <= 1):
-            return False
-
-        _pw = list(pw)
-
-        chr_p = self.get_chr_class(_pw[0])
-
-        for i in range(1, len(pw)):
-
-            c = self.get_chr_class(pw[i]) 
-
-            if (c == 'l' and chr_p == 'l'):
-                return True
-            elif (c == 's' and chr_p == 's'):
-                return True
-            elif (c == 'u' and chr_p == 'u'):
-                return True
-            elif (c == 'n' and chr_p == 'n'):
-                return True
-            else:
-                chr_p = c
-    
-        return False
-        
-    
-    def get_chr_class(self, c=''):
-    
-        """
-        Returns the character class of the input character
-    
-        'l' = lowercase alphabet
-        's' = symbols
-        'u' = uppercase alphabet
-        'n' = numeric
-        """
-    
-        if (len(c) != 1):
-            return 
-    
-        if (c in self.__lcase):
-            return 'l'
-        elif (c in self.__symbols):
-            return 's'
-        elif (c in self.__ucase):
-            return 'u'
-        elif (c in self.__num):
-            return 'n'
-
-#===========================================================================
-#               New Security Related Functions for PWMGR >= 2.3            #
-#===========================================================================
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Security Related Functions for PWMGR >= 2.3                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
 class AllocateSecureMemory():
 
@@ -2620,7 +2227,7 @@ class AllocateSecureMemory():
             self.__data_size_physical = 10
             self.__data_size_virtual  = len(value)
         else:
-            self.__data_size_physical = math_ceil(len(value) * self.__prealloc_percent)
+            self.__data_size_physical = math.ceil(len(value) * self.__prealloc_percent)
             self.__data_size_virtual  = len(value)
 
         ## Memory allocation
@@ -2632,6 +2239,7 @@ class AllocateSecureMemory():
         ## Copying strings
         for i in range(self.__data_size_virtual):
             self.__data[i] = bytes(value[i], 'utf-8')
+
 
     def get_virtual_size(self):
         return self.__data_size_virtual
@@ -2715,7 +2323,7 @@ class AllocateSecureMemory():
         free_space = self.__data_size_physical - self.__data_size_virtual
 
         if (free_space < len(value)):
-            new_physical_size = math_ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
+            new_physical_size = math.ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
             new_virtual_size = len(value) + self.__data_size_virtual
 
             try:
@@ -2773,7 +2381,7 @@ class AllocateSecureMemory():
 
         else:
 
-            new_physical_size = math_ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
+            new_physical_size = math.ceil((self.__data_size_physical + len(value)) * self.__prealloc_percent)
             new_virtual_size = len(value) + self.__data_size_virtual
 
             try:
@@ -2808,8 +2416,17 @@ class AllocateSecureMemory():
 
     def copy_to_clipboard(self):
 
+        output = get_libc_path() 
+
+        if (output[0] == False):
+            raise SecureClipboardCopyFailedException()
+
         try:
-            c_lib = ctypes.CDLL('/lib/libc.so.6')
+            ## Typical path: 
+            ##  '/lib/libc.so.6', 
+            ##  '/usr/lib/x86_64-linux-gnu/libc.so.6'
+
+            c_lib = ctypes.CDLL(output[1])
 
             self.add_str_start("echo '")
             self.add_str_end("' | /usr/bin/xclip -selection clipboard")
@@ -2824,17 +2441,166 @@ class AllocateSecureMemory():
             raise SecureClipboardCopyFailedException(msg)
 
 
-#===========================================================================
-#                   Custom Exception Handling Classes                      #
-#===========================================================================
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Utility                                                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
-class DatabaseEmptyException(Exception):
-    def __init__(self, msg="No record exists"):
-        super(DatabaseEmptyException, self).__init__(msg)
+def run_cmd(cmd=[], verbose=False):
 
-class DatabaseFileNotFoundException(Exception):
-    def __init__(self, msg="Database file not found"):
-        super(DatabaseFileNotFoundException, self).__init__(msg)
+    """
+    Executes bash commands on local Linux system
+    """
+
+    if (cmd != []):
+        process = subprocess.Popen(cmd, shell=True, \
+                                   stdout=subprocess.PIPE, \
+                                   stderr=subprocess.PIPE)
+
+        stdout,stderr = process.communicate()
+
+        stdout = stdout.decode('utf-8').strip()
+        stderr = stderr.decode('utf-8').strip()
+
+        if (verbose == True):
+            print(stdout)
+
+        return stdout, stderr, process.returncode
+
+
+def parse_comma(value=''):
+
+    if (type(value) == str and value != ''):
+        if (',' in value):
+            data = value.strip().split(',')
+            return data
+        else:
+            return value
+
+    return []
+
+
+def convert_str_to_int(val=None):
+
+    """
+    Takes a string or a comma separated value, converts them
+        and returns a list.
+
+    Args: Either string representation of int or a list of
+          comma separated integer in the form of a string.
+          Example: '1' or '1,2,3'
+
+    Returns: [True/False, [integer list]]
+             - First parameter is False if any of the integer
+               conversion failed. It is only True if all conversions
+               succeed
+             - Second Second parameter is the converted integer
+               values from the comma separated values or just
+               an integer depending on the input
+                
+
+    """
+
+    if (val == None):
+        return [False, []]
+    elif (type(val) == str):
+
+        val = parse_comma(val)
+
+        if (type(val) == str):
+            try:
+                val = val.strip()
+                index = int(val)
+            except (ValueError):
+                return [False, -1]
+            return [True, index]
+        elif (type(val) == list):
+            val_list = []
+            try:
+                for i in val:
+                    val_list.append(int(i))
+
+                return [True, val_list]
+            except (ValueError):
+                return [False, val_list]
+        else:
+            return [False, []]
+    else:
+        return [False, []]
+
+
+def decode_unicode_str_safely(input_str=''):
+
+    if (type(input_str) != bytes):
+        msg = 'decode_unicode_str_safely(): data type needs to be bytes'
+        return InvalidParameterException(msg)
+
+    try:
+        return (True, input_str.decode('utf-8'))
+    except UnicodeDecodeError:
+        return (False, '')
+
+
+def get_libc_path():
+
+    """
+    Returns: success/failure (bool), path (str)
+    """
+    stdout, _, rc = run_cmd('locate libc.so')
+
+    if (rc == 0):
+        path_l = stdout.splitlines()
+
+        for path in path_l:
+
+            if (not ('libc.so' in path and os.path.isfile(path))):
+                continue
+
+            base_name = path.split('/')[-1]
+
+            lib_version = base_name.split('.')[-1]
+            conversion_status = convert_str_to_int(lib_version)
+
+            if (conversion_status[0]):
+
+                stdout, _, rc = run_cmd('file %s | cut -d":" -f2' % path)
+
+                if (rc == 0 and \
+                    stdout.strip().startswith('ELF') and \
+                    'shared object' in stdout.lower()):
+
+                    return (True, path)
+
+    return (False, '')
+
+
+def keyfile_load(fp=''):
+
+    if (not os.path.isfile(fp)):
+        return (False, '')
+
+    data_l = []
+
+    with open(fp, 'r') as fh:
+
+        line = fh.readline()
+
+        while (line != ''):
+            data_l.append(line)
+            line = fh.readline()
+
+    if (len(data_l) == 0):
+        return (False, '')
+    else:
+        return (True, ''.join([data.strip() for data in data_l]))
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Exception Handler Classes                                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
 class IncorrectKeyException(Exception):
     def __init__(self, msg="Decryption of database failed due to incorrect key"):
@@ -2848,21 +2614,22 @@ class IntegrityCheckFailedException(Exception):
     def __init__(self, msg="Database file potentially corrupted"):
         super(IntegrityCheckFailedException, self).__init__(msg)
 
+class DataCorruptedException(Exception):
+    def __init__(self, msg="Unable to decode unicode chars, " + \
+                            "database file is corrupted"):
+        super(DataCorruptedException, self).__init__(msg)
+
 class InvalidParameterException(Exception):
     def __init__(self, msg="The input parameter is not valid"):
         super(InvalidParameterException, self).__init__(msg)
 
 class KeyFileInvalidException(Exception):
-    def __init__(self, msg="Keyfile is invalid, need to use a minimum of 2048 bit key"):
+    def __init__(self, msg="Keyfile is invalid, need to use a minimum of 1000 byte key"):
         super(KeyFileInvalidException, self).__init__(msg)
 
 class NoKeyFoundException(Exception):
     def __init__(self, msg="Key doesn't exist"):
         super(NoKeyFoundException, self).__init__(msg)
-
-class PWDecryptionFailedException(Exception):
-    def __init__(self, msg="Decryption of password stored in memory failed due to incorrect key"):
-        super(PWDecryptionFailedException, self).__init__(msg)
 
 class UnsupportedFileFormatException(Exception):
     def __init__(self, msg="Unsupported file format detected"):

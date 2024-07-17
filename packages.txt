@@ -1,0 +1,13 @@
+
+Installing Core Packages through Package Manager
+
+    Ubuntu
+        sudo apt-get install -y git dmenu xclip wxpython-tools keyutils python3-pip libc6
+    
+    Arch
+        sudo pacman -S --noconfirm git dmenu xclip python-wxpython keyutils python-pip glibc 
+
+
+Additional Dependencies:
+
+    pip3 install --user --break-system-packages getch fernet

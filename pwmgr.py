@@ -1,22 +1,20 @@
 #!/usr/bin/python3
-
-import csv, wx, base64
-import subprocess, sys, os
-import termios, tty, random
-from database_pwmgr import Record, ManageRecord, \
-        IncorrectKeyException, IncorrectPasswordException, IntegrityCheckFailedException, \
-        AllocateSecureMemory, UnsupportedFileFormatException, SecureClipboardCopyFailedException, \
-        MemoryAllocationFailedException, KeyFileInvalidException
-from random import seed, randint
-from getpass import getpass
-from getch import getch
-from time import sleep
+from     time import sleep
+from      getch import getch
+from     hashlib import sha256
+from      getpass import getpass
+from      database_pwmgr import ManageRecord,\
+                  Record, AllocateSecureMemory 
+import    os, subprocess, sys
+import   wx, random, math
+import    multiprocessing
+import    base64, csv
 
 
 """
 Password Manager
 
-Copyright © 2023 Zubair Hossain
+Copyright © 2024 Zubair Hossain
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,36 +35,98 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 global __title__, __author__, __email__, __version__, __last_updated__, __license__
 
 __title__        =  'Password Manager'
+__version__      =  '3.0.0'
 __author__       =  'Zubair Hossain'
-__email__        =  'zhossain@protonmail.com'
-__version__      =  '2.6.1'
-__last_updated__ =  '06/16/2023'
+__last_updated__ =  '07/17/2024'
 __license__      =  'GPLv3'
+__email__        =  'zhossain@protonmail.com'
 
 
-global enc_db_handler, app_name, file_name, password_in_keyring, \
-       pw_master, config, config_file, db_file_path, \
-       theme, field_color_fg, term_bar_color, term_len_h, term_len_v
-####### All configs / database is stored under '~/.config/pwmgr/'
+
+#$$$$━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$
+global term_len_h, term_len_v, config, config_file, db_file_path,\
+              theme_number, theme, field_color_fg, term_bar_color,\
+app_name, file_name, enc_db_handler, password_in_keyring, pw_master
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━/
+#//////////////////////////
 password_in_keyring=False
 enc_db_handler = None
 file_name = 'db.enc'
 app_name = 'pwmgr'
-term_len_h = 75
-term_len_v = 30
+config  = {}
+theme   = ''
 pw_master = ''
-config = {}
-theme = 1
 config_file = ''
 db_file_path = ''
 field_color_fg = ''
 term_bar_color = ''
 
 
-#===========================================================================
-#                Database polling & argument parsing functions             #
-#===========================================================================
+global lcase, \
+char_set_complete, \
+symbol, ucase, number
+symbol = "<!$%?+@*^&#>"
+ucase  =  "AMBYNZCODPEQFRGSHTIUJVKWLX"
+lcase  =   "ambynzcodpeqfrgshtiujvkwlx"
+number = "0123456789"
+char_set_complete = \
+symbol + lcase + \
+ucase + \
+number 
 
+
+term_len_v =  30
+term_len_h =  70
+theme_number = 1
+
+
+'''
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃             Code Index              ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+                    Core
+
+      Argument Parsing                137
+      Configuration                   641
+      Essential Functions            1101
+
+
+                  Security
+
+      Keyring Functions              1781
+      Clipboard Functions            2047
+      Secure Printing Functions      2155
+      Keyfile Functions              2787
+
+
+                Uncategorized
+
+      Utility Functions              3178
+      PW Generator Functions         3392
+
+
+                    IO
+
+      Database RW                    3895
+      Advanced Printing Functions    4162
+      File IO Functions              4455
+      User Input & Related           4601
+      Printing Functions             4901
+      Import / Export Functions      5181
+      Gui Functions                  5415
+      Terminal Functions             5450
+      Search Bar                     5501
+      Help Text                      5630
+
+'''
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Argument Parsing Functions                                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
 def parse_args():
 
@@ -75,7 +135,8 @@ def parse_args():
 
     """
 
-    global term_len_h, term_len_v, config, theme, field_color_fg, term_bar_color
+    global term_len_h, config, \
+           theme_number, theme, field_color_fg, term_bar_color
 
     argument_length = len(sys.argv)
 
@@ -85,12 +146,6 @@ def parse_args():
         sys.exit(0)
 
     else:
-
-        try:
-            term_len_h, term_len_v = os.get_terminal_size()
-        except (OSError):
-            term_len_h = 75
-            term_len_v = 75
 
         if (check_if_prog_exists(['keyctl'])[0] == False):
             print(text_error('The program keyctl was not found. It is required to store & manage keys on a system running systemd'))
@@ -106,67 +161,37 @@ def parse_args():
 
         config_pwmgr()
 
-        _theme = config.get('theme')
+        initialize_resolution(init=True)
 
-        if (_theme == 1):
-            theme = color_theme_1()
-            field_color_fg = '\x1B[1;38;5;33m'
-            term_bar_color = '\x1B[1;38;5;75m'
-        elif (_theme == 2):
-            theme = color_theme_2()
-            field_color_fg = '\x1B[1;38;5;46m'
-            term_bar_color = '\x1B[1;38;5;48m'
-        elif (_theme == 3):
-            theme = color_theme_3()
-            field_color_fg = '\x1B[1;38;5;214m'
-            term_bar_color = '\x1B[1;38;5;216m'
-        elif (_theme == 4):
-            theme = color_theme_4()
-            field_color_fg = '\x1B[1;38;5;44m'
-            term_bar_color = '\x1B[1;38;5;14m'
-        elif (_theme == 5):
-            theme = color_theme_5()
-            field_color_fg = '\x1B[1;38;5;208m'
-            term_bar_color = '\x1B[1;38;5;216m'
-        elif (_theme == 6):
-            theme = color_theme_6()
-            field_color_fg = '\x1B[1;38;5;38m'
-            term_bar_color = '\x1B[1;38;5;45m'
-        elif (_theme == 66):
-            theme = color_theme_66()
-            field_color_fg = '\x1B[1;38;5;87m'
-            term_bar_color = '\x1B[1;38;5;45m'
-        else:
-            theme = color_theme_1()
-            field_color_fg = '\x1B[1;38;5;33m'
-            term_bar_color = '\x1B[1;38;5;75m'
+        initialize_theme(init=True)
 
         if (argument_length == 2):
 
-            if (sys.argv[1] == 'add' or sys.argv[1] == '--add' or sys.argv[1] == '-a'):
+            if (sys.argv[1] == 'add'):
+
                 check_database()
                 add()
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'show' or sys.argv[1] == '--show' or sys.argv[1] == '-o'):
+            elif (sys.argv[1] == 'audit'):
+
+                if (term_len_h < 110):
+                    print(text_error('Screen size too small to display data'))
+                    sys.exit(1)
+
+                check_database()
+                exit_if_database_is_empty()
+                audit_records()
+                sys.exit(0)
+
+            elif (sys.argv[1] == 'show'):
 
                 check_database()
                 exit_if_database_is_empty()
                 show_summary()
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'copy-searchbar' or sys.argv[1] == '--copy-searchbar' or sys.argv[1] == '-C'):
-
-                if (check_if_prog_exists(['dmenu', 'xclip'])[0] == False):
-                    print(text_error('Dmenu package & xclip needs to be installed.'))
-                    sys.exit(1)
-                
-                check_database()
-                exit_if_database_is_empty()
-                search_bar_copy()
-                sys.exit(0)
-
-            elif (sys.argv[1] == 'show-searchbar' or sys.argv[1] == '--show-searchbar' or sys.argv[1] == '-O'):
+            elif (sys.argv[1] == 'show+'):
 
                 if (check_if_prog_exists(['dmenu'])[0] == False):
                     print(text_error('Dmenu package was not found. Please install it & try again!'))
@@ -176,29 +201,61 @@ def parse_args():
                 exit_if_database_is_empty()
                 search_bar_show()
 
-            elif (sys.argv[1] == 'show-recent' or sys.argv[1] == '--show-recent' or sys.argv[1] == '-sr'):
+            elif (sys.argv[1] == 'show-latest'):
 
                 check_database()
                 exit_if_database_is_empty()
                 show_last_modified()
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'generate-pw' or sys.argv[1] == '--generate-pw' or sys.argv[1] == '-g'):
+            elif (sys.argv[1] == 'copy+'):
+
+                if (check_if_prog_exists(['dmenu', 'xclip'])[0] == False):
+                    print(text_error('Dmenu package & xclip needs to be installed.'))
+                    sys.exit(1)
+
+                check_database()
+                exit_if_database_is_empty()
+                search_bar_copy()
+                sys.exit(0)
+
+            elif (sys.argv[1] == 'key-show'):
+
+                check_database()
+                key_show()
+                sys.exit(0)
+
+            elif (sys.argv[1] == 'change-enc-key'):
+
+                check_database()
+                pw_reset()
+                sys.exit(0)
+
+            elif (sys.argv[1] == 'keyring-clear'):
+
+                keyring_reset()
+                sys.exit(0)
+
+            elif (sys.argv[1] == 'generator'):
 
                 menu_generate_password_standalone()
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'generate-keyfile' or sys.argv[1] == '--generate-keyfile' or sys.argv[1] == '-gk'):
+            elif (sys.argv[1] == 'keyfile-list'):
+
+                list_keyfile()
+                sys.exit(0)
+
+            elif (sys.argv[1] == 'keyfile-create'):
 
                 if (check_if_prog_exists(['dd'])[0] == False): 
                     print(text_error('The program dd was not found. Please install it & try again!'))
                     sys.exit(1)
 
                 generate_keyfile()
-                print_block(1)
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'use-keyfile' or sys.argv[1] == '--use-keyfile' or sys.argv[1] == '-uk'):
+            elif (sys.argv[1] == 'keyfile-use'):
 
                 fn = '/home/%s/.config/pwmgr/keyfile' % (os.getlogin())
 
@@ -217,7 +274,7 @@ def parse_args():
                     print(text_debug(msg))
                     print_block(1)
 
-                    choice = prompt_yes_no("Do you want to use this keyfile? (Y/n): ", True, True)
+                    choice = prompt_yes_no_instant("Do you want to use this keyfile? (Y/n): ", True)
 
                     if (not choice):
                         print_block(1)
@@ -225,57 +282,25 @@ def parse_args():
 
                     check_database()
                     use_keyfile(fn)
-                    print_block(1)
                     sys.exit(0)
 
-            elif (sys.argv[1] == 'list-keyfile' or sys.argv[1] == '--list-keyfile' or sys.argv[1] == '-lk'):
-
-                list_keyfile()
-                sys.exit(0)
-
-            elif (sys.argv[1] == 'remove-keyfile' or sys.argv[1] == '--remove-keyfile' or sys.argv[1] == '-rk'):
+            elif (sys.argv[1] == 'keyfile-remove'):
 
                 check_database()
                 remove_keyfile()
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'audit' or sys.argv[1] == '--audit'):
-
-                if (term_len_h < 50):
-                    print(text_error('Screen size too small to display data'))
-                    sys.exit(1)
-
-                check_database()
-                exit_if_database_is_empty()
-                audit_records()
-                sys.exit(0)
-
-            elif (sys.argv[1] == 'pw-reset' or sys.argv[1] == '--pw-reset'):
-
-                check_database()
-                pw_reset()
-                sys.exit(0)
-
-            elif (sys.argv[1] == 'key-show' or sys.argv[1] == '--key-show'):
-
-                check_database()
-                key_show()
-                sys.exit(0)
-
-            elif (sys.argv[1] == 'keyring-reset' or sys.argv[1] == '--keyring-reset'):
-
-                keyring_reset()
-                sys.exit(0)
-
             elif (sys.argv[1] == 'help' or sys.argv[1] == '--help' or sys.argv[1] == '-h'):
 
-                if (sys.argv[1] == '-h'):
-                    print(text_error("Option not found. Did u mean" + \
-                                     color_b('orange') + " --help " + \
-                                     color_reset() + "? ;]"))
+                if (sys.argv[1] == '-h' or sys.argv[1] == '--help'):
+                    print(text_error("Option not found. Try using" + \
+                                     color_b('orange') + " help " + \
+                                     color_reset()))
                     sys.exit(0)
 
-                print_help()
+                else:
+                    print_help()
+
                 sys.exit(0)
 
             else:
@@ -284,7 +309,7 @@ def parse_args():
 
         elif (argument_length == 3):
 
-            if (sys.argv[1] == 'show' or sys.argv[1] == '--show' or sys.argv[1] == '-o'):
+            if (sys.argv[1] == 'show'):
 
                 result = convert_str_to_int(sys.argv[2])
 
@@ -324,7 +349,7 @@ def parse_args():
                     print(text_error("Requires an integer or comma separated integer values"))
                     sys.exit(1)
 
-            elif (sys.argv[1] == 'edit' or sys.argv[1] == '--edit' or sys.argv[1] == '-e'):
+            elif (sys.argv[1] == 'edit'):
 
                 index = None
 
@@ -350,7 +375,7 @@ def parse_args():
                     print(text_error("Selected index is not within range"))
                     sys.exit(1)
 
-            elif (sys.argv[1] == 'search' or sys.argv[1] == '--search' or sys.argv[1] == '-s'):
+            elif (sys.argv[1] == 'search'):
 
                 check_database()
                 exit_if_database_is_empty()
@@ -358,7 +383,7 @@ def parse_args():
                 search(keyword)
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'copy' or sys.argv[1] == '--copy' or sys.argv[1] == '-c'):
+            elif (sys.argv[1] == 'copy'):
 
                 index = None
 
@@ -384,7 +409,7 @@ def parse_args():
                     print(text_error("Selected index is not within range"))
                     sys.exit(1)
 
-            elif (sys.argv[1] == 'remove' or sys.argv[1] == '--remove' or sys.argv[1] == '-d'):
+            elif (sys.argv[1] == 'remove'):
 
                 index = None
 
@@ -426,7 +451,7 @@ def parse_args():
                     print(text_error("Requires an integer value or a comma separated list"))
                     sys.exit(1)
 
-            elif (sys.argv[1] == 'generate-keyfile' or sys.argv[1] == '--generate-keyfile' or sys.argv[1] == '-gk'):
+            elif (sys.argv[1] == 'keyfile-generate'):
 
                 if (sys.argv[2].strip() == ''):
                     print(text_error('Key file name cannot be empty'))
@@ -436,7 +461,7 @@ def parse_args():
                 print_block(1)
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'use-keyfile' or sys.argv[1] == '--use-keyfile' or sys.argv[1] == '-uk'):
+            elif (sys.argv[1] == 'keyfile-use'):
 
                 if (sys.argv[2].strip() == ''):
                     print(text_error('Keyfile name cannot be empty'))
@@ -450,45 +475,7 @@ def parse_args():
                 print_block(1)
                 sys.exit(0)
 
-            elif (sys.argv[1] == 'list-keyfile' or sys.argv[1] == '--list-keyfile' or sys.argv[1] == '-lk'):
-
-                if (sys.argv[2].strip() == ''):
-                    list_keyfile()
-                elif (sys.argv[2].strip() == 'brief'):
-                    list_keyfile()
-                elif (sys.argv[2].strip() == 'full'):
-                    list_keyfile(False)
-                else:
-                    print(text_error("The selected option doesn't exist"))
-                    sys.exit(1)
-
-                sys.exit(0)
-
-            elif ((sys.argv[1] == 'audit' or sys.argv[1] == '--audit' and \
-                    (sys.argv[2] == '--show-all' or sys.argv[2] == 'show-all'))):
-
-                if (term_len_h < 50):
-                    print(text_error('Screen size too small to display data'))
-                    sys.exit(1)
-
-                check_database()
-                exit_if_database_is_empty()
-                audit_records(show_all_ratings=True)
-                sys.exit(0)
-
-            elif (sys.argv[1] == 'import' or sys.argv[1] == '--import'):
-
-                if (sys.argv[2] == 'pass'):
-                    print(text_error("Function is no longer supported"))
-                    print(text_debug("Please import your database using " + \
-                            color_b('orange') + "--import-csv" + color_reset() + ' function'))
-                    print_block(1)
-                    sys.exit(0)
-                else:
-                    print(text_error("The selected option doesn't exist"))
-                    sys.exit(1)
-
-            elif (sys.argv[1] == 'import-csv' or sys.argv[1] == '--import-csv'):
+            elif (sys.argv[1] == 'import-csv'):
 
                 fn = sys.argv[2].strip()
 
@@ -500,7 +487,7 @@ def parse_args():
                     print(text_error("The specified file %s doesn't exist" % fn))
                     sys.exit(1)
 
-            elif (sys.argv[1] == 'export-csv' or sys.argv[1] == '--export-csv'):
+            elif (sys.argv[1] == 'export-csv'):
 
                 fn = sys.argv[2].strip()
 
@@ -512,19 +499,7 @@ def parse_args():
                     print(text_error("Requires a file name"))
                     sys.exit(1)
 
-            elif (sys.argv[1] == 'export-csv-brief' or sys.argv[1] == '--export-csv-brief'):
-
-                fn = sys.argv[2].strip()
-
-                if (fn != ''):
-                    check_database()
-                    export_to_csv(fn, brief=True)
-                    sys.exit(0)
-                else:
-                    print(text_error("Requires a file name"))
-                    sys.exit(1)
-
-            elif (sys.argv[1] == 'search-font' or sys.argv[1] == '--search-font'):
+            elif (sys.argv[1] == 'search-font'):
 
                 keyword = sys.argv[2].strip()
 
@@ -541,7 +516,7 @@ def parse_args():
 
         elif (argument_length == 4):
 
-            if (sys.argv[1] == 'search' or sys.argv[1] == '--search' or sys.argv[1] == '-s'):
+            if (sys.argv[1] == 'search'):
 
                 options = ['group', 'site', 'email', 'username', 'all']
 
@@ -570,22 +545,6 @@ def parse_args():
                     search(keyword)
                     sys.exit(0)
 
-
-            elif (sys.argv[1] == 'convert-csv' or sys.argv[1] == '--convert-csv'):
-
-                input_file = sys.argv[2]
-
-                if (input_file == '' or not check_files([input_file])):
-                    msg = "The input file (%s) is not valid" % (input_file)
-                    print(text_error(msg))
-                    sys.exit(1)
-
-                data = read_csv_pwmgr(input_file)
-
-                write_csv_pwmgr(data, sys.argv[3])
-
-                sys.exit(0)
-
             else:
                 print(text_error("The selected option doesn't exist"))
                 sys.exit(1)
@@ -607,7 +566,7 @@ def parse_args():
 
                 input_file = sys.argv[3]
 
-                if (input_file == '' or not check_files([input_file])):
+                if (not file_exists(input_file)):
                     msg = "The input file '%s' does not exist" % (input_file)
                     print(text_error(msg))
                     sys.exit(1)
@@ -628,10 +587,6 @@ def parse_args():
                     elif (index > row_len_max):
                         print(text_error('Index cannot be greater than max row length'))
                         sys.exit(1)
-
-                if (sys.argv[4] == ''):
-                    print(text_error('Output filename needs to be specified'))
-                    sys.exit(1)
 
                 new_data = []
 
@@ -657,1198 +612,15 @@ def parse_args():
             sys.exit(1)
 
 
-def check_database():
-
-    global file_name, db_file_path, app_name, enc_db_handler, pw_master, password_in_keyring, \
-            config, config_file
-
-    config_path = '/home/%s/.config/pwmgr/' % (os.getlogin())
-
-    if (os.path.exists(config_path) == False):
-        os.mkdir(config_path)
-
-    db_file_path = '%s%s' % (config_path, file_name)
-
-    enc_db_handler = ManageRecord()
-
-    keyfile_path = config.get('keyfile_path')
-
-    if (keyfile_path != ''):
-
-        val = check_files([keyfile_path])
-
-        if (not val):
-            msg = 'Keyfile not found in %s' % keyfile_path
-            print(text_error(msg))
-            sys.exit(1)
-
-    if (os.path.isfile(db_file_path) == False):
-        # (No database found)
-
-        print_block(1)
-
-        if (prompt_yes_no("No database exists. Do you want to create a new one? (Y/n): ", True)):
-            print_block(1)
-            pw_master = prompt_password(enforce_min_length=True)
-            print_block(1)
-
-            #TODO: make keyfile_name global variable
-            #TODO: test empty database code below
-            keyfile_name = 'keyfile'
-            keyfile_path = ''
-
-            if (prompt_yes_no("Do you want to auto generate & add a keyfile? (Y/n): ", True)):
-                keyfile_path = '/home/%s/.config/pwmgr/%s' % (os.getlogin(), keyfile_name)
-                generate_keyfile(keyfile_path, False, True)
-
-            enc_db_handler.generate_new_key(pw_master, True, True, keyfile_path)
-            enc_db_handler.write_encrypted_database(db_file_path)
-            config.update({'keyfile_path':keyfile_path})
-            write_config(config, config_file)
-            
-            if (keyring_set(enc_db_handler.get_key()) == False):
-                print(text_error("check_database(): error#01 Unable to store password in keyring"))
-                sys.exit(1)
-
-        else:
-            print_block(1)
-            sys.exit(0)
-    else:
-        # (Previous database exists)
-        # We search for password in keyring, if nothing found we prompt user
-        #       for master password & attempt to decrypt it
-        #
-
-        key = keyring_get()
-        result = False
-
-        ## * We use 2 exception handlers, cos IncorrectPasswordException & 
-        ##   IncorrectKeyException() overlap with other exception handlers
-        ##   so we try to minimise code repetition as much as possible
-        ##   
-        ## * Updated old code (commented out) which mainly used commandline
-        ##   for interacting with user. The new one interacts with user
-        ##   with GUI prompts for error, password input, etc. It is done
-        ##   because if pwmgr is used with key bindings, the user might not
-        ##   know if things go wrong as cmd prompt might just close without showing 
-        ##   anything.
-
-        try:
-            try:
-                if (key == False):
-                    password_in_keyring = False
-                    pw_master = prompt_password_gui() # GUI password prompt
-
-                    if (pw_master == False):
-                        sys.exit(0)
-
-                    result = enc_db_handler.load_database(db_file_path, pw_master, False, keyfile_path)
-                else:
-                    result = enc_db_handler.load_database_key(db_file_path, bytes(key, 'utf-8'))
-
-            except (UnsupportedFileFormatException):
-
-                gui_msg("\nUnsupported file format detected!\n\n" + \
-                        "1) Run '--export csv-brief data.csv' on older version of pwmgr < 2.0\n" + \
-                        "2) Backup & remove ~/.config/pwmgr/data.enc\n" + \
-                        "3) Run '--import data.csv' on latest version of pwmgr >= 2.0\n")
-
-                sys.exit(0)
-
-            except (IntegrityCheckFailedException):
-
-                r = gui_confirmation('\nHash mismatch detected. Data could have been corrupted!\n\n' + \
-                        'Press OK to repair database\n')
-
-                if (r):
-                    if (key):
-                        result = enc_db_handler.load_database_key(db_file_path, bytes(key,'utf-8'), override_integrity_check=True)
-                    else:
-                        result = enc_db_handler.load_database(db_file_path, pw_master, True, keyfile_path)
-
-                    if (result): # Database decryption succeeded
-                        enc_db_handler.write_encrypted_database(db_file_path)
-                        sys.exit(0)
-                else:
-                    sys.exit(0)
-
-
-            if (result):  # Database decryption succeeded
-
-                if (password_in_keyring == False):
-                    if (keyring_set(enc_db_handler.get_key()) == False):
-                        gui_msg("Unable to store password in keyring")
-                    else:
-                        keyring_set_expiration()
-
-        except (IncorrectPasswordException):
-            gui_msg('\nUnable to decrypt data due to incorrect password / keyfile\n')
-            sys.exit(1)
-
-        except (IncorrectKeyException):
-            gui_msg("\nUnable to decrypt data as stored key is incorrect." + \
-                    "\n\nPlease use 'pwmgr --keyring reset' to remove it\n")
-            sys.exit(1)
-
-
-def exit_if_database_is_empty():
-
-    global enc_db_handler
-
-    n = enc_db_handler.get_number_of_records()
-
-    if (n == 0):
-        print_block(1)
-        print(text_debug('Database is empty'))
-        print_block(1)
-        sys.exit(0)
-
-
-def keyring_get():
-
-    """
-    Returns the encryption key stored in keyring
-
-    """
-    global app_name
-    cmd1 = 'keyctl request user %s' % (app_name)
-    stdout,stderr,rc = run_cmd(cmd1)
-
-    #print("stdout: %s" % stdout)
-    #print("stderr: %s" % stderr)
-
-    if (stderr):
-        return False
-
-    key_id = stdout
-
-    cmd2 = 'keyctl print %s' % key_id
-    stdout,stderr,rc = run_cmd(cmd2)
-
-    if (stderr):
-        return False
-
-    return stdout
-
-
-def keyring_set(value):
-
-    """
-    Set the encryption key in keyring
-
-    """
-
-    global app_name
-
-    cmd = 'keyctl add user %s %s @u' % (app_name, value)
-    stdout,stderr,rc = run_cmd(cmd)
-
-    if (stderr):
-        return False
-
-    return True
-
-
-def keyring_reset():
-
-    """
-    Remove the current key from the keyring
-
-    """
-
-    global app_name
-
-    cmd = 'keyctl purge -s user %s' % app_name
-    stdout,stderr,rc = run_cmd(cmd)
-    
-    value = stdout.strip().split(' ')[1]
-    
-    if (int(value) == 0):
-        print(text_error('No password found in keyring'))
-    else:
-        print_block(1)
-        print(text_debug('Password has been deleted from keyring'))
-        print_block(1)
-
-
-def keyring_set_expiration():
-
-    global config, app_name
-
-    t = config.get('keyring_wipe_interval')
-
-    cmd1 = 'keyctl request user %s' % (app_name)
-    stdout,stderr,rc = run_cmd(cmd1)
-
-    if (stderr):
-        return False
-
-    key_id = stdout
-
-    cmd2 = 'keyctl timeout %s %s' % (key_id, t)
-
-    stdout2,stderr2,rc2 = run_cmd(cmd2)
-
-    if (stderr2):
-        return False
-
-    return True
-
-
-def pw_reset():
-
-    """
-    Change the current password that is used for database encryption 
-
-    Note: Needs to be called after database has been loaded in memory using
-          the check_database() function
-
-    """
-
-    global app_name, enc_db_handler, db_file_path, config
-
-    custom_refresh()
-
-    kf = config.get('keyfile_path')
-
-    new_pwd = prompt_password_master(8)
-
-    if (kf != ''):
-
-        try:
-            enc_db_handler.use_keyfile(new_pwd, kf)
-        except (KeyFileInvalidException):
-            print(text_error("Key file is not valid. Need to have a min size of 2048 bits"))
-            print(text_debug("Use -gk to generate a new key file"))
-            sys.exit(0)
-    else:
-        enc_db_handler.change_password(new_pwd)
-
-    enc_db_handler.write_encrypted_database(db_file_path)
-
-    keyring_set(enc_db_handler.get_key())
-
-    print_block(1)
-    print(text_debug('Password has been reset successfully!'))
-    print_block(1)
-    print(color_menu_bars())
-    print_block(1)
-
-
-def key_show():
-
-    """
-    Display the current key that is being used for encryption
-
-    Note: Needs to be called after database has been loaded in memory using
-          the check_database() function
-        
-    """
-
-    global enc_db_handler
-
-    c_value = color_b('green')
-    c_rst = color_reset()
-
-    key = enc_db_handler.get_key()
-    print()
-    msg = 'Current Key: %s%s%s' % (c_value, key, c_rst)
-    print(text_debug(msg))
-    print()
-
-
-def add():
-
-    """
-    Adds a record to database
-    """
-
-    global enc_db_handler, db_file_path, field_color_fg
-
-    cursor_show()
-    clear_screen()
-    print_block(3)
-    print(color_menu_informational("   Press (Enter) to Skip | (Ctrl+C) Quit without saving" + ' '*4))
-    print_block(2)
-
-    site = prompt("Website: ")
-
-    pwd = ''
-
-    r = Record(site, pwd)
-
-    if (enc_db_handler.check_duplicate_entry(r)):
-
-        print_block(1)
-
-        if (not prompt_yes_no("Duplicate entry found. Do you want to continue? (y/N): ", False, False)):
-            print_block(1)
-            print(text_debug("Record has been discarded"))
-            print_block(1)
-            print(plain_menu_bars())
-            print_block(1)
-            sys.exit(0)
-
-    print_block(1)
-
-    if (prompt_yes_no("Auto generate new password? (Y/n): ")):
-        print_block(1)
-        pwd = menu_generate_password()
-    else:
-        print_block(1)
-        pwd = prompt_password(True, 1)
-
-    r = Record(site, pwd)
-
-    print_block(1)
-
-    choice = prompt_yes_no("Do you want to add more info? (y/N): ", False)
-
-    if (choice):
-        clear_screen()
-        print_block(3)
-        print(color_menu_informational("The information below is Optional." + \
-                " (Press Enter if you want to skip)   "))
-
-        print_block(2)
-        email = prompt_blank_fixed_width("Email: ")
-        print_block(1)
-        group = prompt_blank_fixed_width("Group: ")
-        print_block(1)
-        usr = prompt_blank_fixed_width("Username: ")
-        print_block(1)
-        phone = prompt_blank_fixed_width("Phone#: ")
-        print_block(1)
-        remark = prompt_blank_fixed_width("Notes: ")
-        print_block(1)
-        recovery_email = prompt_blank_fixed_width("Recovery email: ", 16)
-        print_block(1)
-        two_factor = prompt_yes_no("Two Factor enabled? (y/N): ", False)
-
-        if (usr != ''):
-            r.set_username(usr)
-
-        if (email != ''):
-            r.set_email(email)
-
-        if (group != ''):
-            r.set_group(group)
-
-        if (remark != ''):
-            r.set_remark(remark)
-
-        if (recovery_email != ''):
-            r.set_recovery_email(recovery_email)
-
-        if (phone != ''):
-            r.set_phone_number(phone)
-
-        if (two_factor != ''):
-            r.set_two_factor(two_factor)
-
-        enc_db_handler.add(r)
-        enc_db_handler.write_encrypted_database(db_file_path)
-
-        print_block(1)
-        print(text_debug("Record has been added successfully!"))
-        print_block(1)
-        print(plain_menu_bars())
-        print_block(1)
-
-    else:
-        ## We could have removed redundant logic but this way ensures we don't
-        ## have menu bars displayed right beneath pw generation menu
-
-        enc_db_handler.add(r)
-        enc_db_handler.write_encrypted_database(db_file_path)
-
-        print_block(1)
-        print(text_debug("Record has been added successfully!"))
-        print_block(1)
-
-
-def audit_records(show_all_ratings=False):
-
-    """
-    Performs security audit on internal database
-
-    """
-    ## Requires >= 100 width term, this check is 
-    ## being done by arg_parser() so skipping this one
-    #global term_len_h
-
-    #if (term_len_h < 100):
-    #    print(text_error('Screen size too small to display data'))
-    #    sys.exit(1)
-
-    global enc_db_handler
-
-    header, data = process_security_data(show_all_ratings=show_all_ratings)
-
-    print_block(1)
-    print(color_menu_column_header(header))
-    print_block(1)
-
-    for r in data:
-        ratio = [5,4,4,2,2.5]
-        print_audit_info(r, ratio)
-
-    print_block(1)
-    print(plain_menu_bars())
-    print_block(1)
-
-
-def process_security_data(show_all_ratings=False):
-
-    global enc_db_handler, db_file_path
-
-    enc_db_handler.audit_security()
-    enc_db_handler.write_encrypted_database(db_file_path)
-
-    sorted_indexes = enc_db_handler.sort_security_rating(sort_ascending=True)
-
-    header = [['Site',4.2] , ['PW Age',3.4], ['PW Reuse',3], ['    PW Strength',2],  ['Security Rating',1.5]]
-
-    data = []
-
-    color_rst = color_reset()
-    color_white = color_b('white')
-    color_green = color_b('green')
-    color_yellow = color_b('yellow')
-    color_gray = '\x1B[1;38;5;246m' 
-    color_red = color_b('red')
-    color_special = '\x1B[1;38;5;51m'
-
-    for i in range(len(sorted_indexes)):
-        
-        index = sorted_indexes[i]
-
-        r = enc_db_handler.get_index_with_enc_pw(index)
-
-        if (not show_all_ratings):
-
-            if (not (int(r.get_security_rating()) <= 11)):
-                continue
-
-        site = r.get_website()
-
-        site_info = [site, color_rst]
-
-        """
-        Ratings:
-     
-        pw_age (3):          'n' =  3, 'o' =  2, 'r' = -1
-        pw_reuse (6):        '0' =  6, '1' =  0
-        pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
-        ___________________________________________________________________________
-        Total score (15):    max = 15, min = 0 (negative values are set to 0)
-
-        (14-15) : Outstanding
-        (12-13) : Good
-        (10-11) : Average
-        (7-9)   : Poor
-        (0-6)   : Critical
-        """
-
-        pw_cmpx = r.get_pw_complexity()
-        pw_cmpx_info = ''
-
-        ## Adding data & color information as a list instead of hardcoded strings
-        ## cos during display function it causes issues with text alignment
-
-        if (pw_cmpx == 'e'):
-            color_info = '%s' % (color_special)
-            pw_cmpx_info = ['Excellent', color_info]
-        elif (pw_cmpx == 'g'):
-            color_info = '%s' % (color_green)
-            pw_cmpx_info = ['Good', color_info]
-        elif (pw_cmpx == 'a'):
-            color_info = '%s' % (color_yellow)
-            pw_cmpx_info = ['Average', color_info]
-        elif (pw_cmpx == 'w'):
-            color_info = '%s' % (color_gray)
-            pw_cmpx_info = ['Weak', color_info]
-        elif (pw_cmpx == 'u'):
-            color_info = '%s' % (color_red)
-            pw_cmpx_info = ['Unsuitable', color_info]
-        elif (pw_cmpx == ''):
-            color_info = '%s' % (color_white)
-            pw_cmpx_info = ['Audit Pending', color_info]
-
-        pw_age = r.get_pw_age()
-        pw_age_info = ''
-        
-        if (pw_age == 'n'):
-            color_info = '%s' % (color_green)
-            pw_age_info = ['< 6 months', color_info]
-        elif (pw_age == 'o'):
-            color_info = '%s' % (color_yellow)
-            pw_age_info = ['>= 6 months', color_info]
-        elif (pw_age == 'r'):
-            color_info = '%s' % (color_red)
-            pw_age_info = ['>= 1 year', color_info]
-        elif (pw_age == ''):
-            color_info = '%s' % (color_white)
-            pw_age_info = ['Audit Pending', color_info]
-
-        pw_reuse = r.get_pw_reuse()
-        pw_reuse_info = ''
-
-        if (pw_reuse == '0'):
-            color_info = '%s' % (color_yellow)
-            pw_reuse_info = ['Not Found', color_info]
-        elif (pw_reuse == '1'):
-            color_info = '%s' % (color_red)
-            pw_reuse_info = ['Found', color_info]
-        elif (pw_reuse == ''):
-            color_info = '%s' % (color_white)
-            pw_reuse_info = ['Audit Pending', color_info]
-
-        s_rating = r.get_security_rating()
-        s_rating_info = ''
-
-        if (s_rating == ''):
-            color_info = '%s' % (color_white)
-            s_rating_info = ['Audit Pending', color_info]
-        else:
-            s_rating = int(s_rating)
-
-            if (s_rating in [14,15]):
-                color_info = '%s' % (color_special)
-                s_rating_info = ['Outstanding', color_info]
-            elif (s_rating in [12,13]):
-                color_info = '%s' % (color_green)
-                s_rating_info = ['Good', color_info]
-            elif (s_rating in [10,11]):
-                color_info = '%s' % (color_yellow)
-                s_rating_info = ['Average', color_info]
-            elif (s_rating in [7,9]):
-                color_info = '%s' % (color_gray)
-                s_rating_info = ['Weak', color_info]
-            elif (s_rating in [0,1,2,3,4,5,6]):
-                color_info = '%s' % (color_red)
-                s_rating_info = ['Critical', color_info]
-
-        color_info = '%s' % (color_yellow)
-
-        _index = [index+1, color_info]
-
-        tmp_data = [ _index, site_info, pw_age_info, pw_reuse_info, pw_cmpx_info, s_rating_info ]
-
-        data.append(tmp_data)
-
-    return header, data
-
-
-def show_summary(input_list=None):
-
-    """
-    Display a summary of the entries in the database
-
-    """
-
-    global enc_db_handler
-
-    data_summary = []
-
-    length = enc_db_handler.get_number_of_records()
-
-    if (input_list == None):
-
-        for i in range(length):
-            r = enc_db_handler.get_index_with_enc_pw(i)
-            data = [(i+1), r.get_website(), r.get_email(), r.get_username(),  r.get_group()]
-            data_summary.append(data)
-    else:
-
-        data_summary = []
-
-        for i in range(len(input_list)):
-            r = enc_db_handler.get_index_with_enc_pw(input_list[i])
-            data = [(input_list[i]+1), r.get_website(), r.get_email(), r.get_username(), r.get_group()]
-            data_summary.append(data)
-
-    # This is for partitioning space & printing out header according to the
-    # ratio specified by the second index
-    new_header = [['Site', 4], ['   Email',4], ['      Username',2], ['       Group', 2]]
-
-    print_block(1)
-    print(color_menu_column_header(new_header))
-    print_block(1)
-
-    for item in data_summary:
-        formatted_data = format_data_with_spacing(item)
-        print(formatted_data)
-
-    print_block(1)
-    print(plain_menu_bars())
-    print_block(1)
-
-
-def show_last_modified():
-
-    """
-    Display entries from database sorted by most recently modified
-
-    """
-
-    global enc_db_handler
-
-    data_summary = []
-
-    input_list = enc_db_handler.get_records_last_modified()
-
-    for i in range(len(input_list)):
-        r = input_list[i][0]
-        index = input_list[i][1]
-        data = [(index+1), r.get_website(), r.get_group(), r.get_last_modified()]
-        data_summary.append(data)
-
-    # This is for partitioning space & printing out header according to the
-    # ratio specified by the second index
-    new_header = [['Site', 2.8], ['  Group', 3], [' Last Modified', 2.5]]
-
-    print_block(1)
-    print(color_menu_column_header(new_header))
-    print_block(1)
-
-    for item in data_summary:
-        formatted_data = format_data_with_spacing(item)
-        print(formatted_data)
-
-    print_block(1)
-    print(plain_menu_bars())
-    print_block(1)
-
-
-def show_index(index=None, display_multiple_index=False):
-
-    """
-    Display the record at the specified index from database
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global enc_db_handler
-
-    if (index == None):
-        return
-
-    r = enc_db_handler.get_index_with_enc_pw(index)
-
-    header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
-            'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
-
-    data = [r.get_website(), '', r.get_email(), r.get_username(), \
-            r.get_group(), r.get_phone_number(), r.get_two_factor(), \
-            r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
-
-    if (not display_multiple_index):
-        print_block(1)
-        # print(color_menu_bars())
-        print(plain_menu_bars())
-        print_block(1)
-
-        display_row_with_sec_mem(header, data, index)
-
-        print_block(1)
-        # print(color_menu_bars())
-        print(plain_menu_bars())
-        print_block(1)
-    else:
-        display_row_with_sec_mem(header, data, index)
-
-
-def get_record_at_index(index=None):
-
-    """
-    Display the record at the specified index from database
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global enc_db_handler
-
-    if (index == None):
-        return
-
-    r = enc_db_handler.get_index_with_enc_pw(index)
-
-    header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
-            'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
-
-    data = [r.get_website(), '', r.get_email(), r.get_username(), \
-            r.get_group(), r.get_phone_number(), r.get_two_factor(), \
-            r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
-
-    return header, data
-
-
-def show_index_static(header=[], data=[], index=0):
-
-    """
-    Display a record without touching database
-
-    """
-
-    if (len(header) == 0 or len(data) == 0):
-        return
-
-    display_row_static_with_sec_mem(header, data, index)
-
-
-def show_index_multiple(index_list=None):
-
-    """
-    Display the record at the specified index from database
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global term_len_h
-
-    print_block(1)
-    print(plain_menu_bars())
-    print_block(1)
-
-    for i in index_list:
-
-        show_index(i, display_multiple_index=True)
-
-        if (i == index_list[-1]):
-            pass
-        else:
-            print_block(2)
-            # print(plain_menu_bars('\u2500', color_enable=False))
-            # print_block(1)
-
-    print_block(1)
-    print(plain_menu_bars())
-    print_block(1)
-
-
-def delete_index(index=None):
-
-    """
-    Deletes record at the specified index, supports list of indexes
-    """
-
-    global enc_db_handler, db_file_path
-
-    if (index == None):
-        return
-    elif (type(index) == int):
-        enc_db_handler.remove_index(index)
-        enc_db_handler.write_encrypted_database(db_file_path)
-        print_block(1)
-        print(text_debug("Record has been deleted."))
-        print_block(1)
-    elif (type(index) == list):
-
-        show_summary(index)
-
-        choice = prompt_yes_no("The records above will be deleted, continue? (y/N): ", False, False)
-
-        print_block(1)
-
-        if (choice):
-            enc_db_handler.remove_index(index) # This function is aware of lists 
-            enc_db_handler.write_encrypted_database(db_file_path)
-            print(text_debug("Specified records have been deleted"))
-            print_block(1)
-            #print(color_menu_bars())
-            #print_block(1)
-        else:
-            print(text_debug("No changes have been made to database"))
-            print_block(1)
-
-
-def secure_copy_password(index=None):
-
-    """
-    Uses a secure version of the original method, differece being that it
-        erases memory after operation is complete
-
-    Copy the specified index from database to clipboard
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global enc_db_handler, config
-
-    if (index == None):
-        return
-
-    sec_mem_handler = None
-
-    try:
-
-        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
-        sec_mem_handler.copy_to_clipboard() # Auto wipes memory so no further action needed
-        print()
-        clear_clipboard()
-
-    except IncorrectPasswordException:
-        gui_msg('\nDecyption of password field in database failed!' + \
-                '\n\n       Database could be partially corrupted')
-        sys.exit(1)
-
-    except MemoryAllocationFailedException:
-        print(text_error('Secure memory function failed due to insufficient memory, using insecure method!'))
-        copy_password(index)
-
-    except SecureClipboardCopyFailedException:
-        print(text_error('Secure memory function is unavailable (libc.so.6 not found), using insecure method!'))
-        copy_password(index)
-
-
-def copy_password(index=None):
-
-    """
-    Copy the specified index from database to clipboard
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global enc_db_handler, config
-
-    if (index == None):
-        return
-
-    try:
-
-        pw = enc_db_handler.get_pw_of_index(index)
-
-        ## Almost impossible to escape single quote in bash
-        ## therefore current solution is to write the pass to a file (@home dir)
-        ## only if single quote is present & ask xclip to copy.
-        ## Obviously we wipe it off as soon as copying is done in milliseconds
-
-        ## This is an exceptional case, in general we never use this approach
-
-        cmd1 = ''
-
-        if ("'" in pw):
-
-            path_pw = '/home/%s/pw.txt' % os.getlogin()
-
-            if (write_str_to_file(pw, path_pw)):
-
-                cmd1 = 'xclip -i \'%s\' -selection clipboard' % path_pw
-                os.system(cmd1)
-                
-                try:
-                    os.remove(path_pw)
-                except FileNotFoundError:
-                    pass
-
-            else:
-                gui_msg('\n\t\t   Unable to copy password to clipboard' + \
-                        "\n\nPlease update your password so that it doesn't use single quotes")
-
-                sys.exit(1)
-        else:
-
-            cmd1 = 'echo -n \'%s\' | xclip -selection clipboard' % pw
-            os.system(cmd1)
-
-        clear_clipboard()
-
-    except IncorrectPasswordException:
-        gui_msg('\nDecyption of password field in database failed!' + \
-                '\n\n       Database could be partially corrupted')
-
-
-
-def clear_clipboard():
-
-    """
-    This function uses wipe_pwmgr.py to clear clipboard & expire keys in tpm
-
-    Initially I wasn't aware that keyctl function supports expiration therefore
-    used this script to clear keys from tpm, now it's not required anymore.
-
-    #TODO wipe_pwmgr.py code needs to be updated to remove unused functionality
-
-    """
-
-    global config
-
-    t1 = int(config.get('clipboard_wipe_interval'))
-
-    if (t1 != 0):
-        print('%s Clipboard will be cleared in %ss' % (color_symbol_debug(), t1))
-
-    t2 = 0 # Ignore keyring wipe as we automatically set expiration
-           # on keys when they're set
-
-    if (check_files(['/usr/bin/wipe_pwmgr.py'])):
-        cmd = 'python3 /usr/bin/wipe_pwmgr.py %s %s' % (t1, t2)
-        os.system(cmd)
-    elif (check_files(['./wipe_pwmgr.py'])):
-        cmd = 'python3 ./wipe_pwmgr.py %s %s' % (t1, t2)
-        os.system(cmd)
-    else:
-        text_error('File wipe_pwmgr.py not found, please copy it to /usr/bin')
-
-    print_block(1)
-
-
-def clear_keyring():
-
-    global config
-
-    t1 = config.get('keyring_wipe_interval')
-    t2 = 0
-
-    if (check_files(['/usr/bin/wipe_pwmgr.py'])):
-        cmd = 'python3 /usr/bin/wipe_pwmgr.py %s %s' % (t2, t1)
-        os.system(cmd)
-    elif (check_files(['./wipe_pwmgr.py'])):
-        cmd = 'python3 ./wipe_pwmgr.py %s %s' % (t2, t1)
-        os.system(cmd)
-    else:
-        text_error('File wipe_pwmgr.py not found, please copy it to /usr/bin')
-
-
-def secure_edit_index(index=None):
-
-    """
-    Edit a record at the specified index & update it to database
-
-    Args: The (index-1) that was shown to user in show_summary() function
-
-    """
-
-    global enc_db_handler, db_file_path, field_color_fg
-
-    if (index == None):
-        return
-
-    r = enc_db_handler.get_index_with_enc_pw(index)
-
-    header = ['Website', 'Password', 'Username', 'Email', 'Group', 'Notes', \
-            'Two-factor', 'Recovery-email', 'Phone-number']
-
-    data = [r.get_website(), '', r.get_username(), \
-            r.get_email(), r.get_group(), r.get_remark(), r.get_two_factor(), \
-            r.get_recovery_email(), r.get_phone_number()]
-
-    sec_mem_handler = None
-
-    sec_mem_handler_new = None
-
-    try:
-        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
-
-    except IncorrectPasswordException:
-        gui_msg('\nDecyption of password field in database failed!' + \
-                '\n\n       Database could be partially corrupted')
-        sys.exit(1)
-
-    except MemoryAllocationFailedException:
-        gui_msg('\nSecure memory function failed due to insufficient memory!' + \
-                '\n\n       If problem persists, switch to pwmgr v2.1.1')
-        sys.exit(1)
-
-    except SecureClipboardCopyFailedException:
-        gui_msg('\n        Secure memory function is unavailable (libc.so.6 not found)' + \
-                '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
-        sys.exit(1)
-
-    cursor_hide()
-    custom_refresh(print_menu_bars=False)
-    print(color_menu_informational("    Press (e) to Edit | (Enter) to Skip | (q) Quit without saving" + ' '*6))
-    print_block(3)
-
-    color = field_color_fg
-    rst = color_reset()
-
-    data_changed = False
-    pw_changed   = False
-
-    for i in range(len(header)):
-
-        category_name = '  %s:' % (header[i])
-        category_name = "{0:<20}".format(category_name)
-
-        if (i == 1):
-
-            text = '%s%s%s ' % (color,category_name,rst) 
-            sys.stdout.write(text)
-            sec_mem_handler.print_str()
-            sys.stdout.flush()
-
-        elif (i == 2): 
-            
-            if (not pw_changed):
-                print_block(1)
-
-            if (data[i] == "''"):
-                print('%s%s%s' % (color,category_name,rst))
-            else:
-                print('%s%s%s %s' % (color,category_name,rst,data[i]))
-
-        else:
-
-            if (data[i] == "''"):
-                print('%s%s%s' % (color,category_name,rst))
-            else:
-                print('%s%s%s %s' % (color,category_name,rst,data[i]))
-
-        try:
-
-            while (True):
-
-                char = getch()
-
-                if (char == 'e' or char == 'E'):
-
-                    cursor_show()
-
-                    if (i == 1):
-
-                        print_block(1)
-
-                        sec_mem_handler_new = prompt_with_sec_mem("           " + ' '*5)
-
-                        data_changed = True
-                        pw_changed   = True
-                        cursor_hide()
-                        break
-
-                    if (i == 6):
-                        data[i] = prompt_yes_no("Enable Two Factor? (y/N): ", "")
-                        data_changed = True
-                        cursor_hide()
-                        break
-                    else:
-                        data[i] = prompt_blank_for_edit("           " + ' '*5)
-                        data_changed = True
-                        cursor_hide()
-                        break
-
-                elif (char == '\n' ):
-
-                    print_block(1)
-                    break
-
-                elif (char in ('q', 'Q')):
-
-                    sec_mem_handler.wipe_memory()
-
-                    if (sec_mem_handler_new != None):
-                        sec_mem_handler_new.wipe_memory()
-
-                    print_block(1)
-                    cursor_show()
-                    sys.exit(1)
-
-        except KeyboardInterrupt:
-
-            sec_mem_handler.wipe_memory()
-
-            if (sec_mem_handler_new != None):
-                sec_mem_handler_new.wipe_memory()
-
-            print_block(1)
-            cursor_show()
-            sys.exit(1)
-
-    if (data_changed):
-
-        r.set_website(data[0])
-        r.set_username(data[2])
-        r.set_email(data[3])
-        r.set_group(data[4])
-        r.set_remark(data[5])
-        r.set_two_factor(data[6])
-        r.set_recovery_email(data[7])
-        r.set_phone_number(data[8])
-
-        if (pw_changed):
-
-            r.update_last_modified()
-            r.set_pw_age('')
-            r.set_pw_complexity('')
-            r.set_pw_reuse('')
-            r.set_security_rating('')
-
-            enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler_new)
-
-        else:
-
-            enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler)
-
-        enc_db_handler.write_encrypted_database(db_file_path)
-
-    sec_mem_handler.wipe_memory()
-
-    if (sec_mem_handler_new != None):
-        sec_mem_handler_new.wipe_memory()
-
-    cursor_show()
-    print(plain_menu_bars())
-    print_block(1)
-
-
-def search(keyword=''):
-
-    global enc_db_handler
-
-    if (keyword == ''):
-        return
-
-    result = enc_db_handler.search_all(keyword)
-
-    if (len(result) == 0):
-        print_block(1)
-        print(text_debug('Nothing found'))
-        print_block(1)
-    else:
-        show_summary(result)
-
-
-def search_extended(keyword='', category=''):
-
-    global enc_db_handler
-
-    if (keyword == '' or category == ''):
-        return
-
-    result = []
-
-    if (category == 'group'):
-        result = enc_db_handler.search_group(keyword)
-    elif (category == 'site'):
-        result = enc_db_handler.search_website(keyword)
-    elif (category == 'email'):
-        result = enc_db_handler.search_email(keyword)
-    elif (category == 'username'):
-        result = enc_db_handler.search_username(keyword)
-
-    if (len(result) == 0):
-        print_block(1)
-        print(text_debug('Nothing found'))
-        print_block(1)
-    else:
-        show_summary(result)
-
-
-#==========================================================================#
-#                              PWMGR Configuration                         #
-#==========================================================================#
-
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Configuration                                                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
 def config_pwmgr():
 
     global config, config_file
-
 
     c_dir = '/home/%s/.config/pwmgr/' % (os.getlogin())
 
@@ -1892,25 +664,23 @@ def validate_config():
     th = config.get('theme')
     kf = config.get('keyfile_path')
 
-    default_cw = 30
-    default_kw = 1800
+    default_cw = 10
+    default_kw = 600
 
     if (not fn):
         set_default_font()
     else:
-        ## Removing font config restriction, do what you want :]
-        # r = check_if_font_exists(fn)
+        r = check_if_font_exists(fn)
 
-        # if (not r):
-        #     set_default_font()
-        pass
+        if (not r):
+            set_default_font()
 
     try:
 
         cw = int(cw)
 
-        if (cw <= 0):
-            config.update({'clipboard_wipe_interval':0})
+        if (cw <= default_cw):
+            config.update({'clipboard_wipe_interval':default_cw})
         else:
             config.update({'clipboard_wipe_interval':cw})
 
@@ -1921,16 +691,19 @@ def validate_config():
 
         kw = int(kw)
 
-        if (kw <= 0):
-            config.update({'keyring_wipe_interval':0})
+        if (kw <= 30):
+            config.update({'keyring_wipe_interval':30})
         else:
             config.update({'keyring_wipe_interval':kw})
 
     except (ValueError, TypeError):
         config.update({'keyring_wipe_interval':default_kw})
 
-    if (not th or type(th) != int):
-        config.update({'theme':1})
+    if (not th or type(th) != int or \
+        not (th >= 1 and th <= 6)):
+        config.update({'theme':66})
+    else:
+        config.update({'theme':th})
 
     if (not kf):
         config.update({'keyfile_path':''})
@@ -1990,7 +763,7 @@ def load_config(filename=''):
         config.update({tmp[0]:tmp[1]})
 
     return config
-    
+
 
 def write_config(config={}, filename=''):
 
@@ -2027,11 +800,131 @@ def write_str_to_file(s='', fn=''):
             fh.write(s)
 
     except (IOError, BaseException):
-        #print('Error occured')
-        #print(e)
         return False
 
     return True
+
+
+def get_screen_resolution():
+
+    stdout, _, rc = run_cmd("xrandr | grep '*' | awk '{print $1}'")
+
+    if rc != 0 or not stdout:
+        return None
+
+    w = int(stdout.split('x')[0])
+    h = int(stdout.split('x')[1])
+
+    return w,h
+
+
+def initialize_resolution(init=False):
+
+    global term_len_h, term_len_v
+
+    if (not init and \
+           global_value_initialized(term_len_h) and \
+           global_value_initialized(term_len_v)):
+
+        return 
+
+    else:
+
+        if (not module_imported('os')):
+
+            term_len_h = 75
+            term_len_v = 25
+
+        else:
+
+            try:
+                term_len_h, term_len_v = os.get_terminal_size()
+            except (OSError):
+                term_len_h = 75
+                term_len_v = 25
+
+
+def initialize_theme(init=False):
+
+    global config, theme_number, theme, \
+           field_color_fg, term_bar_color
+
+    if (init):
+        pass
+    elif (global_value_initialized(theme) and \
+        global_value_initialized(field_color_fg) and \
+        global_value_initialized(term_bar_color)):
+        return
+
+    try:
+        theme_number = config.get('theme')
+    except NameError:
+        theme_number = 66
+
+    if (theme_number == 1):
+        # field_color_fg = '\x1B[1;38;5;44m'
+        theme = color_theme_1()
+        field_color_fg = '\x1B[1;38;5;33m'
+        term_bar_color = '\x1B[1;38;5;75m'
+    elif (theme_number == 2):
+        theme = color_theme_2()
+        field_color_fg = '\x1B[1;38;5;36m'
+        term_bar_color = '\x1B[1;38;5;48m'
+    elif (theme_number == 3):
+        theme = color_theme_3()
+        field_color_fg = '\x1B[1;38;5;214m'
+        term_bar_color = '\x1B[1;38;5;216m'
+    elif (theme_number == 4):
+        theme = color_theme_4()
+        field_color_fg = '\x1B[1;38;5;38m'
+        term_bar_color = '\x1B[1;38;5;45m'
+    elif (theme_number == 5):
+        theme = color_theme_5()
+        field_color_fg = '\x1B[1;38;5;208m'
+        term_bar_color = '\x1B[1;38;5;216m'
+    elif (theme_number == 6):
+        theme = color_theme_6()
+        field_color_fg = '\x1B[1;38;5;38m'
+        term_bar_color = '\x1B[1;38;5;45m'
+    elif (theme_number == 66):
+        theme = color_theme_66()
+        field_color_fg = '\x1B[1;38;5;87m'
+        term_bar_color = '\x1B[1;38;5;45m'
+    else:
+        theme = color_theme_66()
+        field_color_fg = '\x1B[1;38;5;87m'
+        term_bar_color = '\x1B[1;38;5;45m'
+
+
+def search_font_name(keyword=''):
+
+    global field_color_fg
+
+    stdout,_,_ = run_cmd("fc-list | grep -i '%s' | cut -d':' -f2" % (keyword))
+
+    if (stdout == ''):
+        print(text_error('Nothing found'))
+    else:
+
+        color = color_b('yellow')
+        rst   = color_reset()
+
+        font_l = list(set(remove_whitespace_from_list(stdout.split('\n'))))
+
+        font_l.sort()
+
+        count = 1
+
+        print_block(1)
+
+        print(text_debug('The following fonts are installed in system: \n'))
+
+        for f in font_l:
+
+            print("      %s%s)%s %s" % (color, count, rst, f))
+            count += 1
+
+        print_block(1)
 
 
 def set_default_font():
@@ -2084,21 +977,6 @@ def set_default_font():
         config.update({'searchbar_font_size':f_size})
 
 
-def get_screen_resolution():
-
-    cmd = "xrandr | grep '*' | awk '{print $1}'"
-
-    stdout, stderr, rc = run_cmd(cmd)
-
-    if rc != 0 or not stdout:
-        return None
-
-    w = int(stdout.split('x')[0])
-    h = int(stdout.split('x')[1])
-
-    return w,h
-
-
 def get_default_fonts():
 
     r, e, rc = run_cmd(['find /usr/share/fonts -iname "firacode*semibold*"'])
@@ -2129,11 +1007,7 @@ def check_if_font_exists(fn=''):
     if (fn == ''):
         return False
 
-    _fn = rm_space_with_asterisk(fn)
-
-    cmd = 'find /usr/share/fonts -iname "%s*"' % (_fn)
-
-    r, e, rc = run_cmd([cmd])
+    r, _, _ = run_cmd(['find /usr/share/fonts -iname "%s*"' % (rm_space_with_asterisk(fn))])
 
     if r:
         return True
@@ -2194,826 +1068,515 @@ def check_arg(line=''):
         return False
 
 
-#===========================================================================
-#                      User input parsing functions                        #
-#===========================================================================
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Essential Functions                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
-def prompt(question="", enable_color=True):
+def add():
 
-    color = color_b('yellow')
-    rst = color_reset()
+    """
+    Adds a record to database
+    """
 
-    value = ""
+    global enc_db_handler, db_file_path, field_color_fg
 
-    while (value == ""):
+    cursor_show()
+    clear_screen()
+    print_block(1)
+    print(info_bar_dynamic("Add Records  |  Press (Enter) to Skip  |  (Ctrl+c) Quit without saving"))
+    print_block(4)
 
-        if (enable_color):
-            value = input(color_symbol_info() + ' ' + color + question + rst)
-        else:
-            value = input(color_symbol_info() + ' ' + text_highlight(question) + rst)
+    site = prompt("Website: ")
 
-        if (value == ""):
-            print(text_error("Field cannot be blank"))
+    pwd = ''
 
-    return value.lower()
+    if (enc_db_handler.check_duplicate_entry(site)):
 
+        print_block(1)
 
-def prompt_for_edit(question="", enable_color=True):
+        if (not prompt_yes_no_instant("Duplicate entry found. Do you want to continue? (y/N): ", False)):
+            clear_screen()
+            sys.exit(0)
 
-    color = color_b('yellow')
-    rst = color_reset()
+    print_block(1)
 
-    value = ""
-
-    while (value == ""):
-
-        if (enable_color):
-            value = input(color_symbol_prompt() + ' ' + color + question + rst)
-        else:
-            value = input(color_symbol_prompt() + ' ' + text_highlight(question) + rst)
-
-        if (value == ""):
-            print(text_error("Field cannot be blank"))
-
-    return value.lower()
-
-
-def prompt_with_sec_mem(question=""):
-
-    sec_mem_handler = AllocateSecureMemory()
-
-    color = color_b('yellow')
-    rst = color_reset()
-
-    while (True):
-
-        sec_mem_handler.add_str_start(input(color_symbol_prompt() + ' ' + color + text_highlight(question) + rst))
-
-        sec_mem_handler.lstrip()
-
-        if (sec_mem_handler.has_space()):
-            sec_mem_handler.clear_str()
-            print(text_error('Password cannot contain space'))
-
-        elif (not sec_mem_handler.is_empty()):
-            break
-        else:
-            sec_mem_handler.clear_str()
-            print(text_error('Password cannot be empty'))
-
-    return sec_mem_handler
-
-
-def prompt_blank(question="", enable_color=True):
-
-    value = ''
-
-    if (enable_color):
-        color = color_b('yellow')
-        rst = color_reset()
-        value = input(color_symbol_info() + ' ' + color + question + rst)
+    if (prompt_yes_no_instant("Auto generate password? (Y/n): ")):
+        print_block(1)
+        pwd = menu_generate_password_standalone(called_by_add_fn=True)
     else:
-        value = input(color_symbol_info() + ' ' +  text_highlight(question))
+        print_block(1)
+        pwd = prompt_password(True, 1)
 
-    return value
+    ## TODO: Use .set_password() fn
+    r = Record(site, pwd)
+    # r = r.set_password(pwd)
 
+    clear_screen()
+    print_block(1)
 
-def prompt_blank_for_edit(question="", enable_color=True):
+    choice = prompt_yes_no_instant("Do you want to add more info? (y/N): ", False)
 
-    value = ''
+    print(type(r))
 
-    if (enable_color):
-        color = color_b('yellow')
-        rst = color_reset()
-        value = input(color_symbol_prompt() + ' ' + color + question + rst)
+    if (choice):
+        clear_screen()
+        print_block(1)
+        print(info_bar_dynamic(' Add Record  |  Press (Enter) to Skip  ' + \
+                               ' |  (Ctrl+c) Quit without saving'))
+
+        print_block(4)
+
+        r.set_email(prompt_with_blank("Email:  "))
+        print_block(1)
+        r.set_group(prompt_with_blank("Group:  "))
+        print_block(1)
+        r.set_username(prompt_with_blank("Username:  "))
+        print_block(1)
+        r.set_phone_number(prompt_with_blank("Phone#:  "))
+        print_block(1)
+        r.set_remark(prompt_with_blank("Notes:  "))
+        print_block(1)
+        r.set_email(prompt_with_blank("Recovery email:  "))
+        print_block(1)
+        r.set_two_factor(prompt_yes_no_instant("Two Factor enabled? (y/N):  ", \
+                                                False))
+        enc_db_handler.add(r)
+        enc_db_handler.write_encrypted_database(db_file_path)
+
+        clear_screen()
+
     else:
-        value = input(color_symbol_prompt() + ' ' +  text_highlight(question))
+        ## We could have removed redundant logic but this way ensures we don't
+        ## have menu bars displayed right beneath pw generation menu
 
-    return value
+        enc_db_handler.add(r)
+        enc_db_handler.write_encrypted_database(db_file_path)
 
-
-def prompt_blank_fixed_width(question="", question_width=10, left_indent=2):
-
-    color = color_b('yellow')
-    rst = color_reset()
-
-    symbol = '[+] '
-
-    tl1 = list(' ' * (left_indent))
-    tl2  = list(symbol)
-    tl3 = list(' ' * (question_width))
-
-    q_list = list(question)
-
-    for i in range(len(q_list)):
-        tl3[i] = q_list[i]
-
-    text = ''.join(tl1) + color_b('green') + ''.join(tl2) + rst + \
-           color + ''.join(tl3) + rst
-
-    value = input(text)
-
-    return value
+        clear_screen()
 
 
-def prompt_int(question="", default=0, min_value=0, max_value=30):
-
-    while (True):
-        try:
-            tmp_value = input(color_symbol_info() + text_highlight(question))
-
-            if (tmp_value == ''):
-                return default
-
-            tmp_value = int(tmp_value)
-        except (ValueError):
-            print(text_error('Please type an integer'))
-            continue
-
-        if (tmp_value < min_value):
-            print(text_error('Need minimum length of %d characters' % min_value))
-        elif (tmp_value > max_value):
-            print(text_error('Maximum length limit of %d characters' % min_value))
-        else:
-            return tmp_value
-
-
-def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]):
+def show_summary(input_list=None):
 
     """
-    Used during password generation, prompts for password twice
-        in case user mistypes
-    """
-
-    color = color_b('yellow')
-    rst = color_reset()
-
-    value1 = ""
-    value2 = ""
-
-    while True:
-        value1 = getpass(color_symbol_info() + color + " Enter new password: " + rst)
-        value1 = value1.strip()
-
-        if (value1 == ""):
-            print(text_error("Field cannot be blank"))
-            continue
-
-        if (len(blacklisted_chars) != 0):
-
-            found_blacklist_char = False
-
-            for char in blacklisted_chars:
-
-                if (char in value1):
-                    found_blacklist_char = True
-                    break
-
-            if (found_blacklist_char):
-                print(text_error("The following characters are not permitted (%s)" % convert_list_to_str(blacklisted_chars)))
-                continue
-
-
-        if (enforce_min_length and len(value1) < min_length):
-            print(text_error("Minimum password length: %d " % min_length))
-            continue
-        else:
-
-            while True:    
-
-                print_block(1)
-
-                value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
-                value2 = value2.strip()
-
-                if (value2 == ""):
-                    print(text_error("Field cannot be blank"))
-                    continue
-                elif (value2 == value1):
-                    return value1
-                else:
-                    print(text_error("Password don't match, try again!"))
-                    break
-
-
-def prompt_password_master(min_length=8):
+    Display a summary of the entries in the database
 
     """
-    Used to change master password of database
-    """
 
-    global enc_db_handler, config
+    global enc_db_handler
 
-    master_key = enc_db_handler.get_key()
-    kf = config.get('keyfile_path')
+    data_summary = []
 
-    color = color_b('yellow')
-    rst = color_reset()
+    length = enc_db_handler.get_number_of_records()
 
-    value1 = ""
-    value2 = ""
+    if (input_list == None):
 
-    while True:
-
-        key = ''
-
-        value1 = getpass(color_symbol_info() + color + " Enter new password: " + rst)
-        value1 = value1.strip()
-
-        if (value1 == ""):
-            print(text_error("Field cannot be blank"))
-            continue
-        elif (len(value1) < min_length):
-            print(text_error("Minimum password length: %d " % min_length))
-            continue
-        else:
-
-            if (kf != ''):
-                key = enc_db_handler.generate_new_key(value1, False, False, kf)
-            else:
-                key = enc_db_handler.generate_new_key(value1, False, False)
-
-            if (key == master_key):
-                print(text_error("New password cannot be the same as old password"))
-                continue
-            else:
-                break
-
-    while True:    
-        value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
-        value2 = value2.strip()
-
-        if (value2 == ""):
-            print(color_symbol_info() + text_highlight(" Field cannot be blank"))
-            continue
-        elif (value2 == value1):
-            return value1
-        else:
-            print(text_error("Password don't match, try again"))
-
-
-def prompt_password_gui():
-
-    app = wx.App()
-
-    frame = wx.Frame(None, title='pwmgr')
-
-    t_entry = wx.TextEntryDialog(frame, 'Enter Master Password: ', caption='pwmgr',
-            style=wx.TE_PASSWORD|wx.CENTRE|wx.OK|wx.CANCEL, value='')
-
-    if (t_entry.ShowModal() == wx.ID_OK and t_entry.GetValue() != ''):
-        pwd = t_entry.GetValue()
-        t_entry.Destroy()
-        return pwd
+        for i in range(length):
+            r = enc_db_handler.get_record_at_index_with_enc_pw(i)
+            data = [(i+1), r.get_website(), r.get_email(), r.get_username(),  r.get_group()]
+            data_summary.append(data)
     else:
-        t_entry.Destroy()
-        return False
+
+        data_summary = []
+
+        for i in range(len(input_list)):
+            r = enc_db_handler.get_record_at_index_with_enc_pw(input_list[i])
+            data = [(input_list[i]+1), r.get_website(), r.get_email(), r.get_username(), r.get_group()]
+            data_summary.append(data)
+
+    # This is for partitioning space & printing out header according to the
+    # ratio specified by the second index
+    new_header = [['Site', 4], ['   Email',4], ['      Username',2], ['       Group', 2]]
+
+    print_block(1)
+    print(color_menu_column_header(new_header))
+    print_block(1)
+
+    for item in data_summary:
+        formatted_data = format_data_with_spacing(item)
+        print(formatted_data)
+
+    print_block(1)
+    print(plain_menu_bars())
+    print_block(1)
 
 
-def gui_msg(value=''):
+def show_last_modified():
 
-    if (value == ''):
+    """
+    Display entries from database sorted by most recently modified
+
+    """
+
+    global enc_db_handler
+
+    data_summary = []
+
+    global term_len_h, term_len_v
+
+    term_len_h, term_len_v = os.get_terminal_size()
+
+    input_list = enc_db_handler.get_records_last_modified()
+
+    header = []
+    data_ratio = []
+
+    if (term_len_h > 100):
+
+        header = [['Site', 3], ['   Group', 1], ['    Last Modified', 1.5]]
+        data_ratio = [3, 1, 1.5]
+
+        for i in range(len(input_list)):
+            r = input_list[i][0]
+            index = input_list[i][1]
+            data = [(index+1), r.get_website(), r.get_group(), r.get_last_modified()]
+            data_summary.append(data)
+    else:
+
+        header = [['Site', 3], ['    Last Modified', 2]]
+        data_ratio = [3, 2]
+
+        for i in range(len(input_list)):
+            r = input_list[i][0]
+            index = input_list[i][1]
+            data = [(index+1), r.get_website(), r.get_last_modified()]
+            data_summary.append(data)
+
+    # This is for partitioning space & printing out header according to the
+    # ratio specified by the second index
+
+    print_block(1)
+    print(color_menu_column_header(header))
+    print_block(1)
+
+    for item in data_summary:
+        formatted_data = format_data_with_spacing(item, data_ratio)
+        print(formatted_data)
+
+    print_block(1)
+    print(plain_menu_bars())
+    print_block(1)
+
+
+def show_index(index=None, display_multiple_index=False):
+
+    """
+    Display the record at the specified index from database
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler
+
+    if (index == None):
         return
 
-    app = wx.App()
+    r = enc_db_handler.get_record_at_index_with_enc_pw(index)
 
-    frame = wx.Frame(None, title='pwmgr')
-    msg = wx.MessageDialog(frame, value, caption='pwmgr', style=wx.OK|wx.CENTRE)
+    header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
+            'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
 
-    msg.ShowModal()
-    msg.Destroy()
+    data = [r.get_website(), '', r.get_email(), r.get_username(), \
+            r.get_group(), r.get_phone_number(), r.get_two_factor(), \
+            r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
 
+    if (not display_multiple_index):
+        print_block(1)
+        print(plain_menu_bars())
+        print_block(1)
 
-def gui_confirmation(value=''):
+        display_row_with_sec_mem(header, data, index)
 
-    app = wx.App()
-
-    frame = wx.Frame(None, title='pwmgr')
-
-    msg = wx.MessageDialog(frame, value, caption='pwmgr', style=wx.OK|wx.CANCEL|wx.CENTRE)
-
-    ID = msg.ShowModal()
-
-    if (ID == wx.ID_OK):
-        msg.Destroy()
-        return True
+        print_block(1)
+        print(plain_menu_bars())
+        print_block(1)
     else:
-        msg.Destroy()
-        return False
+        display_row_with_sec_mem(header, data, index)
 
 
-def prompt_yes_no(question="", default=True, enable_color=True):
-
-    """
-    Asks yes/no & returns a boolean value.
-    """
-
-    choice_list = ['y', 'yes', 'yesh', 'n', 'no', 'nou']
-
-    while (True):
-        choice = prompt_blank(question, enable_color)
-
-        if (choice in choice_list):
-            if (choice in choice_list[:3]):
-                return True
-            else:
-                return False
-        elif (choice == ''):
-            return default
-        else:
-            print(text_error("Invalid answer.  Please answer 'yes/no'"))
-
-
-def prompt_yes_no_blank(question=""):
+def get_record_at_index(index=None):
 
     """
-    Asks yes/no & returns a boolean value.
-    """
+    Display the record at the specified index from database
 
-    choice_list = ['y', 'yes', 'yesh', 'n', 'no', 'nou']
-
-    while (True):
-        choice = prompt_blank(question)
-
-        if  (choice in choice_list):
-            if (choice in choice_list[:3]):
-                return True
-            else:
-                return False
-        elif (choice == ''):
-            return ''
-        else:
-            print(text_error("Invalid answer. Please answer 'yes/no' or leave blank"))
-
-
-#===========================================================================
-#                           Printing functions                             #
-#===========================================================================
-
-
-def cursor_hide():
-
-    print("\033[?25l")
-
-
-def cursor_show():
-
-    print("\033[?25h")
-
-
-def text_b():
-
-    return "\x1B[1m"
-
-
-def color_n(c=''):
+    Args: The (index-1) that was shown to user in show_summary() function
 
     """
-    Normal colors
-    """
 
-    if (c == 'white'):
-        return "\x1B[0;37m"
-    elif (c == 'blue'):
-        return "\x1B[0;34m"
-    elif (c == 'yellow'):
-        return "\x1B[0;38;5;220m"
-    elif (c == 'red'):
-        return "\x1B[0;31m"
-    elif (c == 'green'):
-        return "\x1B[0;32m"
-    elif (c == 'black'):
-        return "\x1B[0;30m"
-    else:
-        return ""
+    global enc_db_handler
 
+    if (index == None):
+        return
 
-def color_b(c=''):
+    r = enc_db_handler.get_record_at_index_with_enc_pw(index)
 
-    """
-    Bold colors
-    """
+    header = ['Site', 'Password', 'Email', 'Username', 'Group', 'Phone#', \
+            'Two Factor', 'Recovery Email', 'Last Modified', 'Notes']
 
-    if (c == 'white'):
-        return '\x1B[1;38;5;15m'
-    elif (c == 'blue'):
-        return '\x1B[1;34m'
-    elif (c == 'purple'):
-        return '\x1B[1;38;5;141m'
-    elif (c == 'cyan'):
-        return '\x1B[1;38;5;51m'
-    elif (c == 'yellow'):
-        return '\x1B[1;33m'
-    elif (c == 'light_yellow'):
-        return '\x1B[1;38;5;229m'
-    elif (c == 'orange'):
-        return '\x1B[1;38;5;214m'
-    elif (c == 'red'):
-        return '\x1B[1;31m'
-    elif (c == 'green'):
-        return '\x1B[1;38;5;118m'
-    elif (c == 'black'):
-        return '\x1B[1;38;5;0m'
-    else:
-        return ""
+    data = [r.get_website(), '', r.get_email(), r.get_username(), \
+            r.get_group(), r.get_phone_number(), r.get_two_factor(), \
+            r.get_recovery_email(), r.get_last_modified(), r.get_remark()]
+
+    return header, data
 
 
-def color_bg(c=''):
+def show_index_multiple(index_list=None):
 
     """
-    Background colors
-    """
+    Display the record at the specified index from database
 
-    if (c == 'reset'):
-        return "\x1B[40m"
-    elif (c == 'white'):
-        return '\x1B[1;48;5;15m'
-    elif (c == 'blue'):
-        return '\x1B[1;44m'
-    elif (c == 'purple'):
-        return '\x1B[1;48;5;141m'
-    elif (c == 'cyan'):
-        return '\x1B[1;48;5;51m'
-    elif (c == 'yellow'):
-        return '\x1B[1;48;5;229m'
-    elif (c == 'orange'):
-        return '\x1B[1;48;5;214m'
-    elif (c == 'red'):
-        return '\x1B[1;41m'
-    elif (c == 'green'):
-        return '\x1B[1;48;5;118m'
-    elif (c == 'black'):
-        return '\x1B[1;48;5;0m'
-    else:
-        return ""
-
-
-def color_pair(p=''):
+    Args: The (index-1) that was shown to user in show_summary() function
 
     """
-    Color pair combination
-
-    parameter format: 
-        foreground_background
-            e.g: 'white_black'
-    """
-
-    if (p == 'white_blue'):
-        s = '%s%s' % (color_b('white'), color_bg('blue'))
-        return s
-    elif (p == 'white_yellow'):
-        s = '%s%s' % (color_b('white'), color_bg('yellow'))
-        return s
-    elif (p == 'white_red'):
-        s = '%s%s' % (color_b('white'), color_bg('red'))
-        return s
-    elif (p == 'white_green'):
-        s = '%s%s' % (color_b('white'), color_bg('green'))
-        return s
-    elif (p == 'white_black'):
-        s = '%s%s' % (color_b('white'), color_bg('black'))
-        return s
-    elif (p == 'blue_white'):
-        s = '%s%s' % (color_b('blue'), color_bg('white'))
-        return s
-    elif (p == 'blue_yellow'):
-        s = '%s%s' % (color_b('black'), color_bg('yellow'))
-        return s
-    elif (p == 'blue_red'):
-        s = '%s%s' % (color_b('black'), color_bg('red'))
-        return s
-    elif (p == 'blue_green'):
-        s = '%s%s' % (color_b('black'), color_bg('green'))
-        return s
-    elif (p == 'blue_black'):
-        s = '%s%s' % (color_b('blue'), color_bg('black'))
-        return s
-    elif (p == 'yellow_white'):
-        s = '%s%s' % (color_b('yellow'), color_bg('white'))
-        return s
-    elif (p == 'yellow_blue'):
-        s = '%s%s' % (color_b('yellow'), color_bg('blue'))
-        return s
-    elif (p == 'yellow_red'):
-        s = '%s%s' % (color_b('yellow'), color_bg('red'))
-        return s
-    elif (p == 'yellow_green'):
-        s = '%s%s' % (color_b('yellow'), color_bg('green'))
-        return s
-    elif (p == 'yellow_black'):
-        s = '%s%s' % (color_b('yellow'), color_bg('black'))
-        return s
-    elif (p == 'red_white'):
-        s = '%s%s' % (color_b('red'), color_bg('white'))
-        return s
-    elif (p == 'red_blue'):
-        s = '%s%s' % (color_b('red'), color_bg('blue'))
-        return s
-    elif (p == 'red_yellow'):
-        s = '%s%s' % (color_b('red'), color_bg('yellow'))
-        return s
-    elif (p == 'red_green'):
-        s = '%s%s' % (color_b('red'), color_bg('green'))
-        return s
-    elif (p == 'red_black'):
-        s = '%s%s' % (color_b('red'), color_bg('black'))
-        return s
-    elif (p == 'green_white'):
-        s = '%s%s' % (color_b('green'), color_bg('white'))
-        return s
-    elif (p == 'green_blue'):
-        s = '%s%s' % (color_b('green'), color_bg('blue'))
-        return s
-    elif (p == 'green_yellow'):
-        s = '%s%s' % (color_b('green'), color_bg('yellow'))
-        return s
-    elif (p == 'green_red'):
-        s = '%s%s' % (color_b('green'), color_bg('red'))
-        return s
-    elif (p == 'green_black'):
-        s = '%s%s' % (color_b('green'), color_bg('black'))
-        return s
-    elif (p == 'black_white'):
-        s = '%s%s' % (color_b('black'), color_bg('white'))
-        return s
-    elif (p == 'black_blue'):
-        s = '%s%s' % (color_b('black'), color_bg('blue'))
-        return s
-    elif (p == 'black_yellow'):
-        s = '%s%s' % (color_b('black'), color_bg('yellow'))
-        return s
-    elif (p == 'black_red'):
-        s = '%s%s' % (color_b('black'), color_bg('red'))
-        return s
-    elif (p == 'black_green'):
-        s = '%s%s' % (color_b('black'), color_bg('green'))
-        return s
-
-
-def color_pair_error():
-
-    return '\x1B[1;38;5;196m'
-
-
-def color_theme_1():
-
-    s = '\x1B[1;38;5;15m\x1B[1;48;5;25m'
-    return s
-
-
-def color_theme_2():
-
-    s = '\x1B[1;38;5;15m\x1B[1;48;5;30m'
-    return s
-
-
-def color_theme_3():
-
-    s = '\x1B[1;38;5;214m\x1B[1;48;5;233m'
-    return s
-
-
-def color_theme_4():
-
-    s = '\x1B[1;38;5;15m\x1B[1;48;5;24m'
-    return s
-
-
-def color_theme_5():
-
-    s = '\x1B[1;38;5;15m\x1B[1;48;5;130m'
-    return s
-
-
-def color_theme_6():
-
-    s = '\x1B[1;38;5;214m\x1B[1;48;5;24m'
-    return s
-
-
-def color_theme_66():
-
-    s = '\x1B[1;38;5;14m\x1B[1;48;5;233m'
-    return s
-
-
-def color_reset():
-    """
-    Reset bg & fg colors
-    """
-
-    return "\x1B[0m"
-
-
-def text_error(text=''):
-
-    text = '\n  ' + color_pair_error() + color_symbol_error() + \
-            color_reset() + ' ' + text + ' ' + color_reset() + '\n'     
-
-    return text
-
-
-def text_color(text=''):
-
-    global theme
-    text = theme + text + color_reset()
-    return text
-
-
-def text_highlight(text=''):
-
-    text = text_b() + text + color_reset()
-    return text
-
-
-def text_debug(text=''):
-
-    text = color_symbol_debug() + " " + text_highlight(text)
-    return text
-
-
-def color_menu_bars(text=' '):
-
-    global term_len_h, theme
-
-    text = text * term_len_h
-    rst = color_reset()
-    text =  theme + text + rst
-
-    return text
-
-
-def plain_menu_bars(text='\u2501', color_enable=True):
-
-    global term_len_h, term_bar_color
-
-    text = text * term_len_h
-
-    if (color_enable):
-        text = term_bar_color + text + color_reset()
-
-    return text
-
-
-def color_menu_bars_dynamic(text=' ', term_len=[100,100]):
-
-    global theme
-
-    text = text * term_len
-    rst = color_reset()
-    text =  theme + text + rst
-
-    return text
-
-def color_menu_text(text=''):
 
     global term_len_h
 
-    text_size = len(text)
-    remaining_length = int(term_len_h - text_size)
+    print_block(1)
+    print(plain_menu_bars())
+    print_block(1)
 
-    left  = 0
-    right = 0
+    for i in index_list:
 
-    if (remaining_length%2 == 0): # Even
-        left  = int(remaining_length/2)
-        right = int(remaining_length/2)
-    else:
-        left = int(remaining_length/2)
-        right = remaining_length - left
+        show_index(i, display_multiple_index=True)
 
-
-    text =  theme + ' '*left + text + ' '*right + color_reset()
-
-    return text
-
-
-def color_menu_informational(text='', left_indent=0):
-
-    global theme
-
-    indent = '  '
-
-    for i in range(left_indent):
-        indent = '%s ' % indent
-
-    text =  indent + theme + ' ' + text + color_reset()
-
-    return text
-
-
-def color_menu_column_header(header_list=[], left_indent=7):
-
-    global term_len_h, theme
-
-    text  = ' '*(term_len_h-left_indent)
-
-    text_list = list(text)
-
-    if (len(header_list) == 0):
-        text = theme + text + color_reset()
-        return text
-
-    ratio_total = 0
-
-    for i in range(len(header_list)):
-        ratio_total = ratio_total + header_list[i][1]
-
-    total_length = len(text_list) - left_indent
-
-    mark = 0
-
-    for i in range(len(header_list)):
-        space_partition = int((total_length * header_list[i][1]) / ratio_total)
-        char_str = list(header_list[i][0])
-        char_length = len(header_list[i][0])
-        right_space = space_partition - char_length
-
-
-        for i in range(len(char_str)):
-            text_list[mark] = char_str[i]
-            mark += 1
-
-        while (right_space > 0):
-            text_list[mark] = ' '
-            mark += 1
-            right_space -= 1
-
-    text = theme + ' ' * left_indent + ''.join(text_list) + color_reset()
-
-    return text
-
-
-def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
-
-    global term_len_h
-    
-    # Format (data_list)  = '#', 'Site', 'Username', 'Email', 'Group'
-
-    # width of index is fixed at 6 chars, & ratio parameter is used to 
-    # allocate space between the remaining fields site .. group
-
-    number_indent = 7
-
-    text  = ' '*(term_len_h - number_indent)
-
-    text_list = list(text)
-
-    if (len(data_list) == 0):
-        text = ' '*term_len_h + color_reset()
-        return text
-
-    ratio_total = 0
-
-    for i in ratio:
-        ratio_total = ratio_total + i
-
-    str_list = list(str(data_list[0]))
-
-    # Adding additional space on left side, for record index
-    while (len(str_list) < (number_indent-2)):
-        str_list.insert(0, ' ')
-
-    str_list.append(')')
-    str_list.append(' ')
-
-    mark = 0
-
-    for i in range(1,len(data_list)):
-        space_partition = int((len(text_list) * ratio[i-1]) / ratio_total)
-        char_list = list(data_list[i])
-
-        if (len(char_list) > space_partition):
-            new_list = char_list[:space_partition-5]
-
-            for j in range(len(new_list)):
-                text_list[mark] = new_list[j]
-                space_partition -= 1
-                mark += 1
-
-            while (space_partition > 0):
-                if (space_partition <= 2):
-                    text_list[mark] = ' '
-                    space_partition -= 1
-                    mark += 1
-                else:
-                    text_list[mark] = '.'
-                    space_partition -= 1
-                    mark += 1
+        if (i == index_list[-1]):
+            print_block(1)
+            print(plain_menu_bars())
+            print_block(1)
         else:
-            for j in range(len(char_list)):
-                text_list[mark] = char_list[j]
-                space_partition -= 1
-                mark += 1
+            print_block(2)
 
-            while (space_partition > 0):
-                text_list[mark] = ' '
-                space_partition -= 1
-                mark += 1
 
-    text = color_b('yellow') + ''.join(str_list) + color_reset() + ''.join(text_list) 
+def delete_index(index=None):
 
-    return text
+    """
+    Deletes record at the specified index, supports list of indexes
+    """
+
+    global enc_db_handler, db_file_path
+
+    if (index == None):
+        return
+
+    elif (type(index) == int):
+        enc_db_handler.remove_index(index)
+        enc_db_handler.write_encrypted_database(db_file_path)
+        clear_screen()
+
+    elif (type(index) == list):
+
+        show_summary(index)
+
+        choice = prompt_yes_no_instant("The records above will be deleted, continue? (y/N): ", False)
+
+        print_block(1)
+
+        if (choice):
+            enc_db_handler.remove_index(index) # This function is aware of lists 
+            enc_db_handler.write_encrypted_database(db_file_path)
+
+        clear_screen()
+
+
+def audit_records():
+
+    """
+    Performs security audit on internal database
+
+    """
+    ## Requires >= 100 width term, this check is 
+    ## being done by arg_parser() so skipping this one
+
+    global enc_db_handler
+
+    header, data = process_security_data()
+
+    print_block(1)
+    print(color_menu_column_header(header))
+    print_block(1)
+
+    ratio = [5,4,4,2,2.5]
+
+    for r in data:
+        print_audit_info(r, ratio)
+
+    print_block(1)
+    print(plain_menu_bars())
+    print_block(1)
+
+
+def process_security_data():
+
+    global enc_db_handler, db_file_path
+
+    enc_db_handler.audit_security()
+    enc_db_handler.write_encrypted_database(db_file_path)
+
+    sorted_indexes = enc_db_handler.sort_security_rating()
+
+    header = [['Site',4.2] , ['PW Age',3.4], ['PW Reuse',3], ['    PW Strength',2],  ['Security Rating',1.5]]
+
+    data = []
+
+    color_rst          = color_reset()
+    color_worst_shadow = '\x1B[1;38;5;196m\x1B[1;48;5;232m' 
+    color_worst        = '\x1B[1;38;5;196m' 
+    color_red          = color_b('red')
+    color_gray         = '\x1B[1;38;5;246m' 
+    color_yellow       = color_b('yellow')
+    color_green        = color_b('green')  
+
+    color_superb = '\x1B[1;38;5;87m'
+    color_excellent = '\x1B[1;38;5;39m'
+    color_good = '\x1B[1;38;5;79m'
+
+
+    for i in range(len(sorted_indexes)):
+
+        index = sorted_indexes[i]
+
+        r = enc_db_handler.get_record_at_index_with_enc_pw(index)
+
+        site = r.get_website()
+
+        site_info = [site, color_rst]
+
+        """
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                             Ratings
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+         pw_complexity (6)  's' =  6, 'e' =  5, 'g' =  2, 'a' =  0, 'w' = -3, 'u' = -6
+         pw_age        (3)  'n' =  3, 'o' =  1, 'r' = -3, 't' = -5, 'h' = -6
+         pw_reuse      (6)  '0' =  6, '1' =  0
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         Total score (15)     max = 15, min = 0 (negative values are set to 0)
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            (15) Superb
+            (14) Excellent
+         (12-13) Good
+         (10-11) Average
+           (7-9) Weak
+           (0-6) Critical
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+
+        pw_cmpx = r.get_pw_complexity()
+        pw_cmpx_info = ''
+
+        ## Adding data & color information as a list instead of hardcoded strings
+        ## cos during display function it causes issues with text alignment
+
+        if (pw_cmpx == 's'):
+            color_info = '%s' % (color_superb)
+            pw_cmpx_info = ['Superb', color_info]
+        elif (pw_cmpx == 'e'):
+            color_info = '%s' % (color_excellent)
+            pw_cmpx_info = ['Excellent', color_info]
+        elif (pw_cmpx == 'g'):
+            color_info = '%s' % (color_good)
+            pw_cmpx_info = ['Good', color_info]
+        elif (pw_cmpx == 'a'):
+            color_info = '%s' % (color_yellow)
+            pw_cmpx_info = ['Average', color_info]
+        elif (pw_cmpx == 'w'):
+            color_info = '%s' % (color_red)
+            pw_cmpx_info = ['Weak', color_info]
+        elif (pw_cmpx == 'u'):
+            color_info = '%s' % (color_worst)
+            pw_cmpx_info = ['Unsuitable', color_info]
+        elif (pw_cmpx == ''):
+            color_info = '%s' % (color_gray)
+            pw_cmpx_info = ['Audit Pending', color_info]
+
+        pw_age = r.get_pw_age()
+        pw_age_info = ''
+
+        ## pw_age (3)  'n' =  3, 'o' =  1, 'r' = -3, 't' = -5, 'h' = -6
+        if (pw_age == 'n'):
+            color_info = '%s' % (color_green)
+            pw_age_info = ['< 6 months', color_info]
+        elif (pw_age == 'o'):
+            color_info = '%s' % (color_yellow)
+            pw_age_info = ['<= 1 year', color_info]
+        elif (pw_age == 'r'):
+            color_info = '%s' % (color_red)
+            pw_age_info = ['1-1.5 year', color_info]
+        elif (pw_age == 't'):
+            color_info = '%s' % (color_red)
+            pw_age_info = ['1.5-2 years', color_info]
+        elif (pw_age == 'h'):
+            color_info = '%s' % (color_worst)
+            pw_age_info = ['> 2 years', color_info]
+        elif (pw_age == ''):
+            color_info = '%s' % (color_gray)
+            pw_age_info = ['Audit Pending', color_info]
+
+        pw_reuse = r.get_pw_reuse()
+        pw_reuse_info = ''
+
+        ## pw_reuse  (6)  '0' =  6, '1' =  0
+        if (pw_reuse == '0'):
+            color_info = '%s' % (color_yellow)
+            pw_reuse_info = ['Not Found', color_info]
+        elif (pw_reuse == '1'):
+            color_info = '%s' % (color_red)
+            pw_reuse_info = ['Found', color_info]
+
+        s_rating = r.get_security_rating()
+        s_rating_info = ''
+
+        if (s_rating == ''):
+            color_info = '%s' % (color_gray)
+            s_rating_info = ['Audit Pending', color_info]
+
+        else:
+
+            ##    (15) Superb
+            ##    (14) Excellent
+            ## (12-13) Good
+            ## (10-11) Average
+            ##   (7-9) Weak
+            ##   (0-6) Critical
+
+            try:
+                s_rating = int(s_rating)
+            except ValueError:
+                continue
+
+            if (s_rating == 15):
+                color_info = '%s' % (color_superb)
+                s_rating_info = ['Superb', color_info]
+            elif (s_rating == 14):
+                color_info = '%s' % (color_excellent)
+                s_rating_info = ['Excellent', color_info]
+            elif (s_rating in [12,13]):
+                color_info = '%s' % (color_good)
+                s_rating_info = ['Good', color_info]
+            elif (s_rating in [10,11]):
+                color_info = '%s' % (color_yellow)
+                s_rating_info = ['Average', color_info]
+            elif (s_rating in [7,8,9]):
+                color_info = '%s' % (color_red)
+                s_rating_info = ['Weak', color_info]
+            elif (s_rating in [0,1,2,3,4,5,6]):
+                color_info = '%s' % (color_worst_shadow)
+                s_rating_info = ['Critical', color_info]
+
+        color_info = '%s' % (color_yellow)
+
+        _index = [index+1, color_info]
+
+        tmp_data = [ _index, site_info, pw_age_info, pw_reuse_info, pw_cmpx_info, s_rating_info ]
+
+        data.append(tmp_data)
+
+    return header, data
 
 
 def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
@@ -3051,6 +1614,7 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
 
     list_to_be_processed = []
 
+    ## tmp_data = [ _index, site_info, pw_age_info, pw_reuse_info, pw_cmpx_info, s_rating_info ]
     for i in range(1, len(data_list)):
 
         space_partition = int((len(text_list) * ratio[i-1]) / ratio_total)
@@ -3098,18 +1662,617 @@ def print_audit_info(data_list=[], ratio=[3,2,2,1,1]):
     color_rst = color_reset()
 
     text = color_b('yellow') + ''.join(str_list) + color_rst + \
-            data_list[1][1] + ''.join(list_to_be_processed[0]) + color_rst + \
-            data_list[2][1] + ''.join(list_to_be_processed[1]) + color_rst + \
-            data_list[3][1] + ''.join(list_to_be_processed[2]) + color_rst + \
-            data_list[4][1] + ''.join(list_to_be_processed[3]) + color_rst + \
-            data_list[5][1] + ''.join(list_to_be_processed[4]) + color_rst 
+            color_text_with_transparent_bg(''.join(list_to_be_processed[0]), data_list[1][1]) + \
+            color_text_with_transparent_bg(''.join(list_to_be_processed[1]), data_list[2][1]) + \
+            color_text_with_transparent_bg(''.join(list_to_be_processed[2]), data_list[3][1]) + \
+            color_text_with_transparent_bg(''.join(list_to_be_processed[3]), data_list[4][1]) + \
+            color_text_with_transparent_bg(''.join(list_to_be_processed[4]), data_list[5][1])
 
     print(text)
 
 
+def copy_password(index=None):
+
+    """
+    Copy the specified index from database to clipboard
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler, config
+
+    if (index == None):
+        return
+
+    try:
+
+        pw = enc_db_handler.get_pw_of_index(index)
+
+        ## Almost impossible to escape single quote in bash
+        ## therefore current solution is to write the pass to a file (@home dir)
+        ## only if single quote is present & ask xclip to copy.
+        ## Obviously we wipe it off as soon as copying is done in milliseconds
+
+        ## This is an exceptional case, in general we never use this approach
+
+        cmd1 = ''
+
+        if ("'" in pw):
+
+            path_pw = '/home/%s/pw.txt' % os.getlogin()
+
+            if (write_str_to_file(pw, path_pw)):
+
+                cmd1 = 'xclip -i \'%s\' -selection clipboard' % path_pw
+                os.system(cmd1)
+                
+                try:
+                    os.remove(path_pw)
+                except FileNotFoundError:
+                    pass
+
+            else:
+                gui_msg('\n\t\t   Unable to copy password to clipboard' + \
+                        "\n\nPlease update your password so that it doesn't use single quotes")
+
+                sys.exit(1)
+        else:
+
+            cmd1 = 'echo -n \'%s\' | xclip -selection clipboard' % pw
+            os.system(cmd1)
+
+        clear_clipboard()
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+
+
+def search(keyword=''):
+
+    global enc_db_handler
+
+    if (keyword == ''):
+        return
+
+    result = enc_db_handler.search_all(keyword)
+
+    if (len(result) == 0):
+        print_block(1)
+        print(text_debug('Nothing found'))
+        print_block(1)
+    else:
+        show_summary(result)
+
+
+def search_extended(keyword='', category=''):
+
+    global enc_db_handler
+
+    if (keyword == '' or category == ''):
+        return
+
+    result = []
+
+    if (category == 'group'):
+        result = enc_db_handler.search_group(keyword)
+    elif (category == 'site'):
+        result = enc_db_handler.search_website(keyword)
+    elif (category == 'email'):
+        result = enc_db_handler.search_email(keyword)
+    elif (category == 'username'):
+        result = enc_db_handler.search_username(keyword)
+
+    if (len(result) == 0):
+        print_block(1)
+        print(text_debug('Nothing found'))
+        print_block(1)
+    else:
+        show_summary(result)
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Keyring Functions                                                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def keyring_get():
+
+    """
+    Returns the encryption key stored in keyring
+    """
+
+    global app_name
+
+    key_id, stderr, _ = run_cmd('keyctl request user %s' % (app_name))
+
+    if (stderr):
+        return False
+
+    key, stderr, _ = run_cmd('keyctl print %s' % key_id)
+
+    if (stderr):
+        return False
+
+    return key
+
+
+def keyring_set(value):
+
+    """
+    Set the encryption key in keyring
+
+    """
+
+    global app_name
+
+    _, stderr, _ = run_cmd('keyctl add user %s %s @u' % (app_name, value))
+
+    if (stderr):
+        return False
+
+    return True
+
+
+def keyring_set_scrambled(value):
+
+    output = key_scramble(value)
+
+    temp_key = ''
+    scrambled_key = ''
+
+    if (output[0]):
+
+        scrambled_key = output[1][0]
+        temp_key      = output[1][1]
+
+        fp = '/home/%s/.config/pwmgr/tmp' % os.getlogin()
+
+        if (not os.path.isdir(fp)):
+            os.makedirs(fp)
+
+        temp_key_fp = '%s/temp_key.txt' % fp
+
+        try:
+            with open(temp_key_fp, 'w') as fh:
+                fh.write(temp_key)
+        except IOError:
+            return False
+
+        keyring_set(scrambled_key)
+
+        return True
+
+    else:
+
+        return False
+
+
+def key_scramble(value_str=''):
+
+    if (type(value_str) != str):
+        raise InvalidParameterException('key_scramble(): input needs to be of type str')
+    elif (value_str == ''):
+        raise InvalidParameterException('key_scramble(): input str cannot be empty')
+
+    try:
+        _value = base64.urlsafe_b64encode(bytes(value_str, 'utf-8')).decode()
+    except (UnicodeEncodeError, BaseException):
+        return (False, (), 'key_scramble(): Unable to encode to b64 format')
+
+    converted_output = convert_str_to_int_list(_value)
+
+    value_int_l = []
+
+    if (not converted_output[0]):
+        return False
+    else:
+        value_int_l = converted_output[1]
+
+    temp_key = generate_pass_single(len(_value))
+
+    output_l = []
+
+    for i in range(len(value_int_l)):
+
+        try:
+            output_l.append(hex(value_int_l[i] ^ ord(temp_key[i])))
+        except (UnicodeEncodeError, BaseException, TypeError, ValueError):
+            return (False, (), 'key_scramble(): failed to xor str value with generated key')
+
+    ## hex values separated by ',' are encoded in b64 format
+    scrambled_key_b64 = base64.urlsafe_b64encode(bytes(','.join(output_l), 'utf-8')).decode()
+
+    return (True, (scrambled_key_b64, temp_key))
+
+
+def keyring_get_scrambled():
+
+    scrambled_key = keyring_get()
+
+    if (not scrambled_key):
+        return (False, '')
+
+    temp_key = ''
+
+    fp = '/home/%s/.config/pwmgr/tmp' % os.getlogin()
+
+    if (not os.path.isdir(fp)):
+        os.makedirs(fp) 
+
+    temp_key_fp = '%s/temp_key.txt' % fp
+
+    try:
+        with open(temp_key_fp, 'r') as fh:
+            temp_key = fh.read()
+    except IOError:
+        return (False, '')
+
+    output = key_unscramble(scrambled_key, temp_key)
+
+    if (output[0]):
+        return (True, output[1])
+    else:
+        return (False, '')
+
+
+def key_unscramble(value='', temp_key=''):
+
+    if (len(value) == 0 or len(temp_key) == 0):
+        raise InvalidParameterException('unscramble_key(): input parameters cannot be empty')
+
+    _value = ''
+
+    if (type(value) == str):
+        _value = bytes(value, 'utf-8')
+
+    try:
+        _value = base64.urlsafe_b64decode(_value).decode()
+    except (UnicodeDecodeError, BaseException, ValueError):
+        return (False, 'key_unscramble(): error#1 decoding from b64 encoded text')
+
+    _value = _value.split(',')
+
+    # Conversion from hex to int
+    for i in range(len(_value)):
+        try:
+            _value[i] = int(_value[i], 16)
+        except ValueError:
+            return (False, (), '')
+
+    output_str = ''
+
+    for i in range(len(_value)):
+
+        try:
+            output_str += chr(_value[i] ^ ord(temp_key[i]))
+        except TypeError:
+            return (False, 'key_unscramble(): failed to xor str value with generated key')
+
+    try:
+        output_str = base64.urlsafe_b64decode(output_str).decode()
+    except (UnicodeDecodeError, BaseException, ValueError):
+        return (False, 'key_unscramble(): error#2 decoding from b64 encoded text')
+
+    return (True, output_str)
+
+
+def keyring_reset():
+
+    """
+    Remove the current key from the keyring
+
+    """
+
+    global app_name
+
+    stdout, _, _ = run_cmd('keyctl purge -s user %s' % app_name)
+
+    output = stdout.strip().split(' ')[1]
+
+    if (int(output) == 0):
+        print(text_error('No password found in keyring'))
+    else:
+        print_block(1)
+        print(text_debug('Password has been deleted from keyring'))
+        print_block(1)
+
+
+def keyring_set_expiration():
+
+    global config, app_name
+
+    t = config.get('keyring_wipe_interval')
+
+    stdout,stderr,_ = run_cmd('keyctl request user %s' % (app_name))
+
+    if (stderr):
+        return False
+
+    key_id = stdout
+
+    _, stderr, _ = run_cmd('keyctl timeout %s %s' % (key_id, t))
+
+    if (stderr):
+        return False
+
+    return True
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Clipboard Functions                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def secure_copy_password(index=None):
+
+    """
+    Uses a secure version of the original method, differece being that it
+        erases memory after operation is complete
+
+    Copy the specified index from database to clipboard
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler, config
+
+    if (index == None):
+        return
+
+    sec_mem_handler = None
+
+    try:
+
+        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
+        sec_mem_handler.copy_to_clipboard() # Auto wipes memory so no further action needed
+        print()
+        clear_clipboard()
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+        sys.exit(1)
+
+    except MemoryAllocationFailedException:
+        print(text_error('Secure memory wipe function failed due to insufficient memory, using insecure method!'))
+        copy_password(index)
+
+    except SecureClipboardCopyFailedException:
+        print(text_error('Secure memory wipe function is unavailable (libc.so not found), using insecure method!'))
+        copy_password(index)
+
+
+def clear_clipboard():
+
+    """
+    This function uses wipe_pwmgr.py to clear clipboard & expire keys in tpm
+
+    Initially I wasn't aware that keyctl function supports expiration therefore
+    used this script to clear keys from tpm, now it's not required anymore.
+
+    #TODO wipe_pwmgr.py code needs to be updated to remove unused functionality
+
+    """
+
+    global config
+
+    t1 = int(config.get('clipboard_wipe_interval'))
+
+    if (t1 != 0):
+        print('%s Clipboard will be cleared in %ss' % (color_symbol_debug(), t1))
+
+    t2 = 0 # Ignore keyring wipe as we automatically set expiration
+           # on keys when they're set
+
+    if (check_files(['/usr/bin/wipe_pwmgr.py'])):
+        cmd = 'python3 /usr/bin/wipe_pwmgr.py %s %s' % (t1, t2)
+        os.system(cmd)
+    elif (check_files(['./wipe_pwmgr.py'])):
+        cmd = 'python3 ./wipe_pwmgr.py %s %s' % (t1, t2)
+        os.system(cmd)
+    else:
+        text_error('File wipe_pwmgr.py not found, please copy it to /usr/bin')
+
+    print_block(1)
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Secure Printing Function                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def secure_edit_index(index=None):
+
+    """
+    Edit a record at the specified index & update it to database
+
+    Args: The (index-1) that was shown to user in show_summary() function
+
+    """
+
+    global enc_db_handler, db_file_path, field_color_fg, theme, term_len_h
+
+    if (index == None):
+        return
+
+    initialize_theme()
+
+    r = enc_db_handler.get_record_at_index_with_enc_pw(index)
+
+    header = ['Website', 'Password', 'Username', 'Email', 'Group', 'Notes', \
+              'Two-factor', 'Recovery-email', 'Phone-number']
+
+    data = [r.get_website(), '', r.get_username(), \
+            r.get_email(), r.get_group(), r.get_remark(), r.get_two_factor(), \
+            r.get_recovery_email(), r.get_phone_number()]
+
+    sec_mem_handler = None
+
+    sec_mem_handler_new = None
+
+    try:
+        sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
+
+    except IncorrectPasswordException:
+        gui_msg('\nDecyption of password field in database failed!' + \
+                '\n\n       Database could be partially corrupted')
+        sys.exit(1)
+
+    except MemoryAllocationFailedException:
+        gui_msg('\nSecure memory wipe function failed due to insufficient memory!' + \
+                '\n\n       If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
+
+    except SecureClipboardCopyFailedException:
+        gui_msg('\n        Secure memory wipe function is unavailable (libc.so not found)' + \
+                '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
+        sys.exit(1)
+
+    cursor_hide()
+    custom_refresh(print_menu_bars=False, n1=1)
+
+    print(info_bar_dynamic('Edit Records | Press (e) to Edit | (Enter) to Skip | (q) Quit without saving'))
+    print_block(4)
+
+    color = field_color_fg
+    rst = color_reset()
+
+    data_changed = False
+    pw_changed   = False
+
+    for i in range(len(header)):
+
+        category_name = '  %s:' % (header[i])
+        category_name = "{0:<20}".format(category_name)
+
+        if (i == 1):
+
+            text = '%s%s%s ' % (color,category_name,rst) 
+            sys.stdout.write(text)
+            sec_mem_handler.print_str()
+            sys.stdout.flush()
+
+        elif (i == 2): 
+
+            if (not pw_changed):
+                print_block(1)
+
+            if (data[i] == "''"):
+                print('%s%s%s' % (color,category_name,rst))
+            else:
+                print('%s%s%s %s' % (color,category_name,rst,data[i]))
+
+        else:
+
+            if (data[i] == "''"):
+                print('%s%s%s' % (color,category_name,rst))
+            else:
+                print('%s%s%s %s' % (color,category_name,rst,data[i]))
+
+        try:
+
+            while (True):
+
+                char = getch()
+
+                if (char == 'e' or char == 'E'):
+
+                    cursor_show()
+
+                    if (i == 1):
+
+                        print_block(1)
+
+                        sec_mem_handler_new = prompt_with_sec_mem("           " + ' '*5)
+
+                        data_changed = True
+                        pw_changed   = True
+                        cursor_hide()
+                        break
+
+                    if (i == 6):
+                        data[i] = prompt_yes_no_instant("Two Factor authentication enabled? (y/N): ", False)
+                        data_changed = True
+                        cursor_hide()
+                        break
+                    else:
+                        data[i] = prompt_for_edit_with_blank("           " + ' '*5)
+                        data_changed = True
+                        cursor_hide()
+                        break
+
+                elif (char == '\n' ):
+
+                    print_block(1)
+                    break
+
+                elif (char in ('q', 'Q')):
+
+                    sec_mem_handler.wipe_memory()
+
+                    if (sec_mem_handler_new != None):
+                        sec_mem_handler_new.wipe_memory()
+
+                    cursor_show()
+                    clear_screen()
+                    sys.exit(1)
+
+        except KeyboardInterrupt:
+
+            sec_mem_handler.wipe_memory()
+
+            if (sec_mem_handler_new != None):
+                sec_mem_handler_new.wipe_memory()
+
+            cursor_show()
+            clear_screen()
+            sys.exit(1)
+
+    if (data_changed):
+
+        r.set_website(data[0])
+        r.set_username(data[2])
+        r.set_email(data[3])
+        r.set_group(data[4])
+        r.set_remark(data[5])
+        r.set_two_factor(data[6])
+        r.set_recovery_email(data[7])
+        r.set_phone_number(data[8])
+
+        if (pw_changed):
+
+            r.update_last_modified()
+            r.set_pw_age('')
+            r.set_pw_complexity('')
+            r.set_pw_reuse('')
+            r.set_security_rating('')
+
+            enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler_new)
+
+        else:
+
+            enc_db_handler.update_index_with_sec_mem(r, index, sec_mem_handler)
+
+        enc_db_handler.write_encrypted_database(db_file_path)
+
+    sec_mem_handler.wipe_memory()
+
+    if (sec_mem_handler_new != None):
+        sec_mem_handler_new.wipe_memory()
+
+    cursor_show()
+    clear_screen()
+
+
 def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_width=20, indent=5):
 
-    global term_len_h, theme, field_color_fg
+    global term_len_h, theme, field_color_fg, config
 
     if (len(data_list) == 0 or len(field_list) == 0):
         return
@@ -3117,6 +2280,9 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
     if (term_len_h < 50):
         print(text_error('Terminal size too small to display data'))
         sys.exit(1)
+
+    if (not global_value_initialized(theme)):
+        theme = ''
 
     try:
 
@@ -3128,27 +2294,27 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
         sys.exit(1)
 
     except MemoryAllocationFailedException:
-        gui_msg('\nSecure memory function failed due to insufficient memory!' + \
+        gui_msg('\nSecure memory wipe function failed due to insufficient memory!' + \
                 '\n\n       If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
     except SecureClipboardCopyFailedException:
-        gui_msg('\n        Secure memory function is unavailable (libc.so.6 not found)' + \
+        gui_msg('\n        Secure memory wipe function is unavailable (libc.so not found)' + \
                 '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
     theme_num = config.get('theme')
 
     color_not_audited = '\x1B[1;38;5;250m\x1B[1;48;5;232m'
-    color_good = '\x1B[1;38;5;10m\x1B[1;48;5;232m'
-    color_neutral = '\x1B[1;38;5;226m\x1B[1;48;5;232m'
-    color_bad = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
-
+    color_unsuitable  = '\x1B[1;38;5;88m\x1B[1;48;5;232m'
+    color_bad         = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
+    color_neutral     = '\x1B[1;38;5;221m\x1B[1;48;5;232m'
+    color_good        = '\x1B[1;38;5;79m\x1B[1;48;5;232m'
+    color_excellent   = '\x1B[1;38;5;39m\x1B[1;48;5;232m'
+    color_superb      = '\x1B[1;38;5;87m\x1B[1;48;5;232m'
     color_rst = color_reset()
 
-    record = enc_db_handler.get_index_with_enc_pw(index) 
-
-    audit_rating = record.get_pw_complexity()
+    audit_rating = enc_db_handler.audit_pw_complexity(sec_mem_handler.get_str())
 
     last_mod_rating = enc_db_handler.audit_pw_age_single_record(index)
 
@@ -3166,9 +2332,8 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
         text_list = []
 
-        field = '%s ' % field_list[i]
-        f_list_char = list(field)
-        
+        f_list_char = list(field_list[i])
+
         d_list_char = list(data_list[i])
 
         for j in range(len(f_list_char)):
@@ -3203,12 +2368,12 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             if (theme_num == 66):
                 text = '\x1B[1;38;5;214m' + indent_text + \
-                        text_highlight(''.join(h_list)) + color_rst + \
+                        text_highlight(''.join(h_list)) + \
                         field_color_fg + ''.join(text_list[0]) + color_rst
             else:
                 text = field_color_fg + indent_text + \
-                        text_highlight(''.join(h_list)) + color_rst + \
-                        field_color_fg + ''.join(text_list[0]) + color_rst
+                        text_highlight(''.join(h_list)) + \
+                        ''.join(text_list[0])
 
             print(text)
 
@@ -3222,7 +2387,7 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             for line in text_list[1:]:
 
-                text = indent_text + blank_header + field_color_fg + ''.join(line) + color_rst
+                text = indent_text + blank_header + ''.join(line) + color_rst
 
                 print(text)
         else:
@@ -3237,26 +2402,37 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                 if (theme_num == 66):
 
                     text = '\x1B[1;38;5;214m' + indent_text + \
-                            text_highlight(''.join(h_list)) + color_rst 
+                            text_highlight(''.join(h_list))
                 else:
 
                     text = field_color_fg + indent_text + \
-                            text_highlight(''.join(h_list)) + color_rst 
+                            text_highlight(''.join(h_list))
 
                 sys.stdout.write(text)
-                
+
                 pw_sec_color = ''
+
+                ## pw_complexity (6)  's' =  6, 'e' =  5, 'g' =  2,
+                ##                    'a' =  0, 'w' = -3, 'u' = -6
 
                 if (theme_num == 66):
 
                     if (audit_rating == ''):
                         pw_sec_color = color_not_audited
-                    elif (audit_rating == 'e' or audit_rating == 'g'):
-                        pw_sec_color = color_good
+                    elif (audit_rating == 'u'):
+                        pw_sec_color = color_unsuitable
+                    elif (audit_rating == 'w'):
+                        pw_sec_color = color_bad
                     elif (audit_rating == 'a'):
                         pw_sec_color = color_neutral
+                    elif (audit_rating == 'g'):
+                        pw_sec_color = color_good
+                    elif (audit_rating == 'e'):
+                        pw_sec_color = color_excellent
+                    elif (audit_rating == 's'):
+                        pw_sec_color = color_superb
                     else:
-                        pw_sec_color = color_bad
+                        pw_sec_color = color_not_audited
 
                 sys.stdout.write('%s' % pw_sec_color)
                 sec_mem_handler.print_str()
@@ -3265,7 +2441,8 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
 
             elif (i == 8 and theme_num == 66):
 
-                # pw_age (3): 'n' =  3, 'o' =  2, 'r' = -1
+                ## pw_age (3)  'n' =  3, 'o' =  1,
+                ##             'r' = -3, 't' = -5, 'h' = -6
 
                 last_mod_color = ''
 
@@ -3273,11 +2450,12 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                     last_mod_color = color_good
                 elif (last_mod_rating == 'o'):
                     last_mod_color = color_neutral
-                elif (last_mod_rating == 'r'):
+                elif (last_mod_rating == 'r' or \
+                      last_mod_rating == 't' or \
+                      last_mod_rating == 'h'):
                     last_mod_color = color_bad
                 else:
                     last_mod_color = color_not_audited
-
 
                 start_index = len(text_l_obj) - 1
 
@@ -3292,8 +2470,8 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                     start_index -= 1
 
 
-                text = '\x1B[1;38;5;214m' + indent_text + text_highlight(''.join(h_list)) + color_rst + \
-                        last_mod_color + ''.join(text_l_obj) 
+                text = '\x1B[1;38;5;214m' + indent_text + text_highlight(''.join(h_list)) + \
+                        last_mod_color + ''.join(text_l_obj) + color_rst
 
                 print(text)
 
@@ -3304,13 +2482,13 @@ def display_row_with_sec_mem(field_list=[], data_list=[], index=None, header_wid
                 if (theme_num == 66):
 
                     text = '\x1B[1;38;5;214m' + indent_text + \
-                            text_highlight(''.join(h_list)) + color_rst + \
+                            text_highlight(''.join(h_list)) + \
                             field_color_fg + ''.join(text_l_obj) + color_rst
                 else:
 
                     text = field_color_fg + indent_text + \
-                            text_highlight(''.join(h_list)) + color_rst + \
-                            field_color_fg + ''.join(text_l_obj) + color_rst
+                            text_highlight(''.join(h_list)) + \
+                            ''.join(text_l_obj)
 
                 print(text)
 
@@ -3330,23 +2508,22 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
     theme_num = config.get('theme')
 
+    if (not global_value_initialized(theme)):
+        theme = ''
+
     sec_mem_handler = None
 
     color_not_audited = '\x1B[1;38;5;250m\x1B[1;48;5;232m'
-    color_good = '\x1B[1;38;5;10m\x1B[1;48;5;232m'
-    color_neutral = '\x1B[1;38;5;226m\x1B[1;48;5;232m'
-    color_bad = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
+    color_unsuitable  = '\x1B[1;38;5;88m\x1B[1;48;5;232m'
+    color_bad         = '\x1B[1;38;5;9m\x1B[1;48;5;232m'
+    color_neutral     = '\x1B[1;38;5;221m\x1B[1;48;5;232m'
+    color_good        = '\x1B[1;38;5;79m\x1B[1;48;5;232m'
+    color_excellent   = '\x1B[1;38;5;39m\x1B[1;48;5;232m'
+    color_superb      = '\x1B[1;38;5;87m\x1B[1;48;5;232m'
 
     color_rst = color_reset()
 
-    record = enc_db_handler.get_index_with_enc_pw(index) 
-
-    audit_rating = record.get_pw_complexity()
-
-    last_mod_rating = enc_db_handler.audit_pw_age_single_record(index)
-
     try:
-
         sec_mem_handler = enc_db_handler.get_pw_of_index_with_sec_mem(index)
 
     except IncorrectPasswordException:
@@ -3355,19 +2532,20 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
         sys.exit(1)
 
     except MemoryAllocationFailedException:
-        gui_msg('\nSecure memory function failed due to insufficient memory!' + \
+        gui_msg('\nSecure memory wipe function failed due to insufficient memory!' + \
                 '\n\n       If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
     except SecureClipboardCopyFailedException:
-        gui_msg('\n        Secure memory function is unavailable (libc.so.6 not found)' + \
+        gui_msg('\n        Secure memory wipe function is unavailable (libc.so not found)' + \
                 '\n\nTry installing glibc package. If problem persists, switch to pwmgr v2.1.1')
         sys.exit(1)
 
-    count = 0
+    audit_rating = enc_db_handler.audit_pw_complexity(sec_mem_handler.get_str())
 
-    term_settings_original = get_term_settings()
-    unset_term_mode_raw()
+    last_mod_rating = enc_db_handler.audit_pw_age_single_record(index)
+
+    count = 0
 
     try:
 
@@ -3375,17 +2553,17 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
             sleep(0.05)
 
-            term_length_var_h, term_length_var_v = os.get_terminal_size()
+            term_len_var_h, term_len_var_v = os.get_terminal_size()
 
-            if (term_length_var_h == term_len_h and \
-                    term_length_var_v == term_len_v and \
+            if (term_len_var_h == term_len_h and \
+                    term_len_var_v == term_len_v and \
                     count != 0):
 
                 continue
 
             else:
 
-                if (term_length_var_v < 14):
+                if (term_len_var_v < 14):
 
                     clear_screen()
                     print_block(1)
@@ -3397,11 +2575,14 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                 count += 1
 
-                term_len_h = term_length_var_h
-                term_len_v = term_length_var_v
+                term_len_h = term_len_var_h
+                term_len_v = term_len_var_v
 
+                # This is the number of vertical lines excluding
+                #     data that needs to be printed
                 num_vert_lines = term_len_v - 14
-                num_lines_top = int(num_vert_lines/2) 
+
+                num_lines_top = int(num_vert_lines/2)
 
                 if ((num_vert_lines % 2) != 0):
                     num_lines_top = int(num_vert_lines/2) - 1
@@ -3453,7 +2634,6 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                     if (len(text_l_obj) <= 0):
                         print(text_error('Terminal size too small to display data'))
-                        restore_term_settings(term_settings_original)
                         sys.exit(1)
 
                     if (len(d_list_char) > len(text_l_obj)):
@@ -3474,7 +2654,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                             text_l_obj = list(' ' * (term_len_h - ((2 * indent) + header_width)))
 
                         text = field_color_fg + indent_text + \
-                                text_highlight(''.join(h_list)) + color_rst + ''.join(text_list[0]) + color_rst
+                                text_highlight(''.join(h_list)) + ''.join(text_list[0])
 
                         print(text)
 
@@ -3489,7 +2669,8 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                         for line in text_list[1:]:
 
                             if (theme_num == 66):
-                                text = indent_text + blank_header + field_color_fg + ''.join(line) + color_rst
+                                # text = indent_text + blank_header + field_color_fg + ''.join(line) + color_rst
+                                text = indent_text + blank_header  + ''.join(line) + color_rst
                             else:
                                 text = field_color_fg + indent_text + blank_header + color_rst + ''.join(line) + color_rst
 
@@ -3503,21 +2684,29 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                             pw_sec_color = ''
 
-                            text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + color_rst
+                            text = field_color_fg + indent_text + text_highlight(''.join(h_list))
                             sys.stdout.write(text)
 
                             if (theme_num == 66):
-
-                                ## pw_complexity (6):   'e' =  6, 'g' =  4, 'a' = 2, 'w' = -2, 'u' = -4
+                                ## pw_complexity (6)  's' =  6, 'e' =  5, 'g' =  2,
+                                ##                    'a' =  0, 'w' = -3, 'u' = -6
 
                                 if (audit_rating == ''):
                                     pw_sec_color = color_not_audited
-                                elif (audit_rating == 'e' or audit_rating == 'g'):
-                                    pw_sec_color = color_good
+                                elif (audit_rating == 'u'):
+                                    pw_sec_color = color_unsuitable
+                                elif (audit_rating == 'w'):
+                                    pw_sec_color = color_bad
                                 elif (audit_rating == 'a'):
                                     pw_sec_color = color_neutral
+                                elif (audit_rating == 'g'):
+                                    pw_sec_color = color_good
+                                elif (audit_rating == 'e'):
+                                    pw_sec_color = color_excellent
+                                elif (audit_rating == 's'):
+                                    pw_sec_color = color_superb
                                 else:
-                                    pw_sec_color = color_bad
+                                    pw_sec_color = color_not_audited
 
                                 sys.stdout.write('%s' % pw_sec_color)
                                 sec_mem_handler.print_str()
@@ -3532,7 +2721,8 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
 
                             if (i == 8 and theme_num == 66):
 
-                                # pw_age (3): 'n' =  3, 'o' =  2, 'r' = -1
+                                ## pw_age (3)  'n' =  3, 'o' =  1,
+                                ##             'r' = -3, 't' = -5, 'h' = -6
 
                                 last_mod_color = ''
 
@@ -3540,7 +2730,9 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                                     last_mod_color = color_good
                                 elif (last_mod_rating == 'o'):
                                     last_mod_color = color_neutral
-                                elif (last_mod_rating == 'r'):
+                                elif (last_mod_rating == 'r' or \
+                                      last_mod_rating == 't' or \
+                                      last_mod_rating == 'h'):
                                     last_mod_color = color_bad
                                 else:
                                     last_mod_color = color_not_audited
@@ -3563,7 +2755,7 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
                                 print()
 
                             else:
-                                text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + color_rst + ''.join(text_l_obj) + color_rst
+                                text = field_color_fg + indent_text + text_highlight(''.join(h_list)) + ''.join(text_l_obj)
                                 print(text)
 
                 print_block(1)
@@ -3578,299 +2770,414 @@ def display_row_static_with_sec_mem(field_list=[], data_list=[], index=None, hea
     if (sec_mem_handler != None):
         sec_mem_handler.wipe_memory()
 
-    restore_term_settings(term_settings_original)
     cursor_show()
     clear_screen()
     sys.exit(0)
 
 
-def color_symbol_prompt():
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Keyfile Functions                                                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
-    text = '  ' + color_b('yellow') + '\u25BA ' + color_reset()
-    return text
+def keyfile_load(fp=''):
 
+    if (not os.path.isfile(fp)):
+        return (False, '')
 
-def color_symbol_info():
+    data_l = []
 
-    text = '  ' + color_b('green') + '[+]' + color_reset()
-    return text
+    with open(fp, 'r') as fh:
 
+        line = fh.readline()
 
-def color_symbol_error():
+        while (line != ''):
+            data_l.append(line)
+            line = fh.readline()
 
-    return '[-]'
+    if (len(data_l) == 0):
+        return (False, '')
+    else:
+        data_l = [data.strip() for data in data_l]
+        return (True, ''.join(data_l))
 
 
-def color_symbol_debug():
+def keyfile_write(fp='', num_bytes=1000):
 
-    text = '  ' + color_b('yellow') + '[*]' + color_reset()
-    return text
+    initialize_charset()
 
+    global lcase, symbol, ucase, number, char_set_complete
 
-def print_not_implemented():
+    random.seed()
 
-    print(text_error("Feature not implemented yet"))
+    kf_data = ''
 
+    for i in range(num_bytes):
 
-def print_block(n=3):
-    for i in range(n):
-        print()
+        choice = random.choice([0,5,2,4,3,1])
 
+        if (choice == 0 or choice == 1):
+            kf_data = "%s%s" % (kf_data, random.choice(symbol))
+        elif (choice == 2 or choice == 3):
+            kf_data = "%s%s" % (kf_data, random.choice(number))
+        elif (choice == 4):
+            kf_data = "%s%s" % (kf_data, random.choice(lcase))
+        elif (choice == 5):
+            kf_data = "%s%s" % (kf_data, random.choice(ucase))
 
-def print_header():
+    return write_str_to_file_as_block(kf_data, fp)
 
-    global __title, __version__
 
-    txt_color = '\x1B[1;38;5;87m' 
+def write_str_to_file_as_block(data='', fp=''):
 
-    # header = \
-    # """
-    # ------------------------------------------------------------------
+    block_width = 50
 
+    if (len(data) <= block_width):
 
-    #                        %s%s %s%s%s
+        with open(fp, 'w'):
+            try:
+                fp.write(data)
+            except IOError:
+                return False
 
+    number_of_rows = int(math.ceil(len(data)/block_width))
 
-    # ------------------------------------------------------------------""" \
-    #         % (txt_color, text_highlight(__title__), \
-    #         txt_color, text_highlight(__version__), color_reset())
+    index = 0
 
-    lines = '    ' + '\u2501' * 71
+    with open(fp, 'w') as fh:
 
-    print()
-    print(lines)
+        for i in range(number_of_rows):
 
-    header = \
-    """
+            if (i == number_of_rows-1):
 
-                             %s%s %s%s%s
+                try:
+                    fh.write(data[index:])
+                    fh.write('\n')
+                except IOError:
+                    return False
+            else:
 
-    """ % (txt_color, text_highlight(__title__), \
-            txt_color, text_highlight(__version__), color_reset())
+                try:
+                    fh.write(data[index:index+block_width])
+                    fh.write('\n')
+                except IOError:
+                    return False
 
-    print(text_highlight(header))
+            index += block_width
 
-    print(lines)
+    return True
 
 
-def print_help():
+def generate_keyfile(fp='', confirm=True, called_by_add_fn=False):
 
-    print_header()
+    rst = color_reset()
+    color_green  = color_b('green')
+    color_yellow = color_b('yellow')
 
-    txt_color = '\x1B[1;38;5;255m'
+    length = 1000
 
-    print(
-    """
+    clear_screen()
+    print_block(1)
 
-    %s[add, -a]
+    if (not called_by_add_fn):
+        print(info_bar_dynamic("Encryption management (generate-keyfile) | (Ctrl+c) Quit without saving"))
+        print_block(4)
 
-         %sAllows the user to add a new record to the database%s
+    while (True):
 
+        l = prompt_with_blank("Enter length (default 1000 bytes): ")
 
-    %s[edit, -e] %s[record number]
+        if (l == ""):
+            break
 
-         %sAllows the user to edit the specified entry in the database%s
+        try:
+            l = int(l)
+        except (ValueError):
+            print(text_error('An integer value is required'))
+            continue
 
+        if (l < 1000):
+            print(text_error('Length cannot be less that 1000 bytes'))
+            continue
+        else:
+            length = l
+            break
 
-    %s[search, -s] [group | site | email | username | all] %s[keyword]
+    if (fp == ''):
 
-         %sSearch by group, site, ..., etc. 
+        keyfile_name = 'keyfile'
+        _fp = '/home/%s/.config/pwmgr/%s' % (os.getlogin(), keyfile_name)
 
-         %sAll records that match the specified keyword will be shown 
+        if (not os.path.isdir(os.path.dirname(_fp))):
+            os.makedirs(os.path.dirname(_fp))
 
-         %s* By default the search keyword without any other additional
-         %s  parameters uses the 'search all' function
-         
-         %sgroup     - Search for the keyword by group 
-         %ssite      - Search for the keyword by website 
-         %semail     - Search for the keyword by email address
-         %susername  - Search for the keyword by username
-         %sall       - Search for the keyword in in all of the
-         %s            above categories%s
+        if (confirm):
 
+            if (os.path.isfile(_fp)):
+                print_block(1)
+                confirm_txt = 'File exists in \'' + color_green + _fp + \
+                               color_yellow + '\'. Overwrite file? (Y/n) '
+                r = prompt_yes_no_instant(confirm_txt, True)
 
-    %s[show, -o] %s[record number]
+                if (not r):
+                    print_block(1)
+                    sys.exit(0)
 
-         %sShow details about the specific record from the database
+        clear_screen()
+        print_block(1)
+        msg = 'Creating keyfile: %s%s%s' % (color_green, _fp, rst)
+        print(text_debug(msg))
 
-         %s* Without a record number (pwmgr -o), the show command 
-         %s  displays a brief summary of the entire database
+        keyfile_write(_fp, length)
 
-         %s* Multiple comma separated values can also be passed 
-         %s  to the show command, e.g: 'pwmgr -o 1,2,3'%s
+        print_block(1)
+        print(text_debug('Key file creation successful'))
 
+    else:
 
-    %s[show-searchbar, -O]
-        
-         %sSearch & display record using search bar%s
+        _fp = fp
 
+        if (_fp.startswith('~/')):
+            _fp = '/home/%s/%s' % (os.getlogin(), _fp[2:]) 
 
-    %s[show-recent, -sr]
-    
-         %sShow all entries from database sorted by most recently updated%s 
+        if (not os.path.isdir(os.path.dirname(_fp))):
+            os.makedirs(os.path.dirname(_fp))
 
+        if (confirm):
 
-    %s[copy, -c] %s[record number]
+            if (os.path.isfile(_fp)):
 
-         %sCopies the password for the specific entry to the clipboard%s 
-    
+                print_block(1)
+                confirm_txt = 'File exists in \'' + color_green + _fp + \
+                               color_yellow + '\'. Overwrite file? (Y/n) '
+                r = prompt_yes_no_instant(confirm_txt, True)
 
-    %s[copy-searchbar, -C]
-        
-         %sSearches for record using search bar & copies password to clipboard%s 
-          
+                if (not r):
+                    print_block(1)
+                    sys.exit(0)
 
-    %s[remove, -d] %s[record number]
 
-         %sRemove the specified entry from the database
+        clear_screen()
+        print_block(1)
+        msg = 'Creating keyfile: %s%s%s' % (color_green, _fp, rst)
+        print(text_debug(msg))
 
-         %s* This command also accepts comma separated values & 
-         %s  can remove multiple entries. e.g: 'pwmgr -d 55,48'%s
+        keyfile_write(_fp, length)
 
+        print_block(1)
+        print(text_debug('Key file creation successful'))
 
-    %s[generate-pw, -g]
 
-         %sGrants access to the password generator%s 
+def use_keyfile(keyfile_path=''):
 
+    global enc_db_handler, config, config_file, db_file_path 
 
-    %s[generate-keyfile, -gk] %s[file path]
-        
-         %sAllows the user to generate a secure, pseudo random keyfile
+    master_key = enc_db_handler.get_key()
 
-         %s* If a path is not provided, the key file is saved in 
-         %s  '~/.config/pwmgr' directory%s 
+    pw = ''
 
+    kf = config.get('keyfile_path')
 
-    %s[use-keyfile, -uk] %s[file path]
+    value1 = ''
+    color = color_b('yellow')
+    rst = color_reset()
 
-         %sAdd key file to compliment the master password
+    cursor_hide()
+    clear_screen()
+    print_block(1)
+    print(info_bar_dynamic("Encryption management (use-keyfile) | (Ctrl+c) Quit without saving"))
+    print_block(4)
 
-         %s* If a path is not provided, pwmgr will search for key file
-         %s  in '~/.config/pwmgr' directory 
+    while (True):
 
-         %s* This function can also be used to change an existing keyfile%s
+        key = ''
 
+        value1 = getpass(color_symbol_info() + color + " Enter password: " + rst)
+        value1 = value1.strip()
 
-    %s[list-keyfile, -lk] [brief | full]
+        if (value1 == ""):
+            print(text_error("Field cannot be blank"))
+            continue
 
-         %sList the keyfile that is currently being used by the database
+        if (kf != ''):
+            key = enc_db_handler.generate_new_key(value1, False, False, kf)
+        else:
+            key = enc_db_handler.generate_new_key(value1, False, False)
 
-         %s* Option brief shows the last 50 bits of base64 encoded keyfile 
-         %s  whereas full option displays the complete form. If no option 
-         %s  is specified, brief is used%s
-        
+        if (key != master_key):
+            print(text_error("Master password is incorrect, try again"))
+            continue
+        else:
+            pw = value1
+            break
 
-    %s[remove-keyfile, -rk]
+    try:
+        enc_db_handler.use_keyfile(pw, keyfile_path)
+    except (FileNotFoundError):
+        print(text_error("Key file not found"))
+        sys.exit(0)
+    except (KeyFileInvalidException):
+        print(text_error("Key file is not valid. Need to have a min size of 1000 bytes"))
+        print(text_debug("Use -gk & -uk to generate and use a new key file") + '\n')
+        sys.exit(0)
 
-         %sRemoves the existing key file that is being used by the database
+    config.update({'keyfile_path':keyfile_path})
+    write_config(config, config_file)
+    enc_db_handler.write_encrypted_database(db_file_path)
 
-         %s* Without a key file, only master password will be used for 
-         %s  encryption / decryption of database%s
+    cursor_show()
+    clear_screen()
 
+    if (keyring_set_scrambled(enc_db_handler.get_key()) == False):
+        print(text_error("use_keyfile(): Unable to store password in keyring"))
+        print_block(1)
+        sys.exit(1)
 
-    %saudit [show-all]
 
-         %sPerforms a security audit on all records & reports 
-         %sthe overall security posture. Factors such as password 
-         %scomplexity, whether the password was reused in another
-         %srecord and password age is used to determine the overall 
-         %srisk of using that password
- 
-         %s* If show-all is specified, rating for all records are displayed%s
+def list_keyfile():
 
+    global config
 
-    %spw-reset
+    kf = config.get('keyfile_path')
 
-         %sAllows the user to change the master password%s
+    print_block(1)
 
+    if (kf == ''):
+        print(text_debug('No keyfile is currently being used'))
+        print_block(1)
 
-    %skey-show
+    elif (not check_files([kf])):
+        msg = "Keyfile listed in config '%s' is not found" % kf
+        print(text_error(msg))
+        print_block(1)
 
-         %sDisplays the current master key that is being used 
-         %sfor encryption / decryption%s
+    else:
+        color_green = color_b('green')
+        c_rst = color_reset()
 
+        msg = 'Current keyfile: %s%s%s' % (color_green, kf, c_rst)
 
-    %skeyring-reset
+        print(text_debug(msg))
+        print_block(1)
 
-         %sAllows the user to remove password from keyring
+        kf_data = ''
 
-         %s* This command can be useful for example if you have 
-         %s  a different password database & you want to remove
-         %s  the previous password that was set on the keyring%s
+        output = keyfile_load(kf)
 
+        if (output[0]):
+            kf_data = bytes(output[1], 'utf-8')
 
-    %sconvert-csv %s[input file] [output file]
-    
-         %sConverts an unquoted or single quoted csv file to double quoted format%s
+        s = sha256(kf_data)
 
+        hash_value = s.hexdigest()
 
-    %sselect-cols-csv %s[order of rows] [input file] [output file]
-    
-         %sLoads csv database, selects & rearranges columns in the specified order
+        msg = 'Keyfile data hash (sha-256): %s%s%s' % \
+                (color_green, hash_value, c_rst)
 
-         %s* Can also be used to remove columns that are not needed%s
+        print(text_debug(msg))
 
+        print_block(1)
 
-    %simport-csv %s[input file]
 
-         %sImports database from csv file, the following formats are supported:
+def remove_keyfile():
 
-             %s1) site,password
-             %s2) site,password,username
-             %s3) site,password,username,email
-             %s4) site,password,username,email,notes
+    global enc_db_handler, config, config_file, db_file_path 
 
-             %s5) site,pass,last_modified,email,notes, ..
+    cursor_hide()
+    clear_screen()
+    print_block(1)
+    print(info_bar_dynamic("Encryption management (remove-keyfile) | (Ctrl+c) Quit without saving"))
+    print_block(4)
 
-             %s   (14 fields, including security audit attributes)
-             %s      * Used in pwmgr version >= 1.9%s
+    kf = config.get('keyfile_path')
 
+    color = color_b('yellow')
+    rst = color_reset()
 
-    %sexport-csv %s[output file]
+    if (kf == ''):
+        clear_screen()
+        sys.exit(1)
 
-         %sExports all fields in the database to csv format%s
+    master_key = enc_db_handler.get_key()
+    pw  = ''
 
+    while (True):
 
-    %sexport-csv-brief %s[output file]
+        key = ''
 
-         %sExports only 'site,password,username' fields to csv format%s
+        value1 = getpass(color_symbol_info() + color + " Enter password: " + rst)
+        value1 = value1.strip()
 
+        if (value1 == ""):
+            print(text_error("Field cannot be blank"))
+            continue
 
-    %ssearch-font %s[keyword]
+        key = enc_db_handler.generate_new_key(value1, False, False, kf)
 
-         %sLists fonts found on your system based on keyword%s
+        if (key != master_key):
+            print(text_error("Master password is incorrect, try again"))
+            continue
+        else:
+            pw = value1
+            print_block(1)
+            break
 
-    """ % (color_b('orange'), txt_color, color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,  color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color, \
-            txt_color,txt_color,txt_color,txt_color,txt_color, \
-            txt_color,txt_color,txt_color,txt_color, color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,txt_color, color_reset(), \
-            color_b('orange'), txt_color, color_reset(), \
-            color_b('orange'), txt_color, color_reset(), 
-            color_b('orange'), color_b('yellow'), txt_color, color_reset(), \
-                    color_b('orange'), txt_color, color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color, txt_color, txt_color, color_reset(), \
-            color_b('orange'), txt_color, color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color, color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color, color_reset(), \
-            color_b('orange'), txt_color,txt_color,txt_color,txt_color, color_reset(), \
-            color_b('orange'), txt_color,txt_color,txt_color, color_reset(), 
-            color_b('orange'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,color_reset(), \
-            color_b('orange'), txt_color, color_reset(), \
-            color_b('orange'), txt_color,txt_color,color_reset(), \
-            color_b('orange'), txt_color,txt_color,txt_color,txt_color,color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,txt_color,color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color,txt_color, color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,color_reset(), \
-            color_b('orange'), color_b('yellow'), txt_color,color_reset()))
+    enc_db_handler.remove_keyfile(pw)
 
+    config.update({'keyfile_path':''})
+    write_config(config, config_file)
 
-#===========================================================================
-#                           Utility functions                              #
-#===========================================================================
+    enc_db_handler.write_encrypted_database(db_file_path)
+
+    cursor_show()
+    clear_screen()
+
+    if (keyring_set_scrambled(enc_db_handler.get_key()) == False):
+        print(text_error("use_keyfile(): Unable to store password in keyring"))
+        sys.exit(1)
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Utility Functions                                                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def module_imported(module_name=''):
+    # need to import sys module
+
+    if (module_name in sys.modules):
+        return True
+    else:
+        return False
+
+
+def global_value_initialized(value=''):
+
+    try:
+
+        if (type(value) == str and value != ''):
+            return True
+        elif (type(value) == int and value != -1):
+            return True
+        elif (type(value) == float and value != -1):
+            return True
+        elif (type(value) == dict and len(value) != 0):
+            return True
+        elif (type(value) == list and len(value) != 0):
+            return True
+        elif (type(value) == tuple and len(value) != 0):
+            return True
+        elif (module_imported('multiprocessing') and \
+               type(value) == type(multiprocessing.Queue()) and \
+               len(value) != 0):
+            return True
+        else:
+            return False
+
+    except NameError:
+        return False
 
 
 def l(value=''):
@@ -3886,6 +3193,20 @@ def l(value=''):
 def convert_list_to_str(l=[]):
 
     return ','.join(l)
+
+
+def convert_str_to_int_list(value=''):
+
+    output = []
+
+    for i in range(len(value)):
+
+        try:
+            output.append(ord(value[i]))
+        except TypeError:
+            return (False, [])
+
+    return (True, output)
 
 
 def parse_comma(value=''):
@@ -3946,7 +3267,7 @@ def convert_str_to_int(val=None):
                 val = val.strip()
                 index = int(val)
             except (ValueError):
-                return [False, []]
+                return [False, -1]
             return [True, index]
         elif (type(val) == list):
             val_list = []
@@ -4028,13 +3349,1143 @@ def run_cmd(cmd=[], verbose=False):
 
         stdout,stderr = process.communicate()
 
-        stdout = stdout.decode('ascii').strip()
-        stderr = stderr.decode('ascii').strip()
+        stdout = stdout.decode('utf-8').strip()
+        stderr = stderr.decode('utf-8').strip()
 
         if (verbose == True):
             print(stdout)
 
         return stdout, stderr, process.returncode
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   PW Generator Functions                                           ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def initialize_charset():
+
+    global symbol, ucase, number, lcase
+
+    if (not global_value_initialized(symbol) and \
+            global_value_initialized(ucase)  and \
+            global_value_initialized(number) and \
+            global_value_initialized(lcase)):
+
+        ## Original, got replaced by opt
+        #symbol  = "<:()|;{}!@#%^&+_*,/-\\][$?>"
+        #ucase   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        #number  = "0123456789"
+        #lcase   = "abcdefghijklmnopqrstuvwxyz"
+
+        lcase    = "ambynzcodpeqfrgshtiujvkwlx"
+        symbol   = "!@#$<%?^&+*>:"
+        ucase    = "AMBYNZCODPEQFRGSHTIUJVKWLX"
+        number   = "0123456789"
+
+
+def generate_pass(length=10):
+
+    """
+    Generates a grid of 10 passwords of length 10,
+        and selects a random column among them
+
+    Args:
+        length (int): Length of the generated password
+        grid(bool):   Returns a grid of generated password
+                        of size length x length
+
+        enableSymbols (bool): Allow symbol in password (default: True)
+
+    Returns:
+        (str): Generated password
+
+                or
+
+        int []: An array of generated passwords
+    """
+
+    '''
+    0   = symbol
+    1   = numbers
+    2   = lower case
+    3   = upper case
+
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #              Char primary           #
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                    10+ chars
+
+    Seq  Example            Code
+
+    1    abcdef!@1A      -> 2222220013
+    4    !@AaBbCc12      -> 0032323211
+    7    !1abcdef@A      -> 0122222203
+    9    1ABC!@abc2      -> 1333002221
+
+                    15+ chars
+
+    Seq  Example            Code
+
+    1    abcdefgh!@#12AB -> 222222220001133
+    4    !@#AaBbCcDd1234 -> 000323232321111
+    7    !@123abcdefgh#A -> 001112222222203
+    9    1ABCDE!@#abcde2 -> 133333000222221
+
+                    21+ chars
+    Seq  Example            Code
+
+    1    abcdefghi!@#$%123ABCD -> 222222222000001113333
+    4    !@#$%^&AaBbCcDd123456 -> 000000032323232111111
+    7    !@123abcdefghijkl#ABC -> 001112222222222220333
+    9    1ABCDE!@#abcde2$%^FGH -> 133333000222221000333
+
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #            Number primary           #
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                   10+ chars
+
+    Seq  Example            Code
+
+    5    A!123456a@  -> 3011111120
+    2    a123!456A@  -> 2111011130
+    8    1!2A34a5@6  -> 1013112101
+    10   1234abcdA*  -> 1111222230
+
+                  15+ chars
+
+    Seq  Example            Code
+
+    5    AB!@12345678ab@ -> 330011111111220
+    2    a1234!@5678A#$% -> 211110011113000
+    8    1!2A34a5@6B7b8# -> 101311210131210
+    10   12345678abcdeA* -> 111111112222230
+
+
+                  21+ chars
+
+    Seq  Example            Code
+
+    5    ABC!@12345678910ab#$% -> 333001111111111122000
+    2    a1234!@5678A#$%91011^ -> 211110011113000111110
+    8    1!2A34a5@6B7b8#910C$% -> 101311210131210111300
+    10   1234567891011abcdeAB* -> 111111111111122222330
+
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #            Symbol primary           #
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              10+ chars
+
+    Seq  Example            Code
+
+    3    !a@A#1$2%^     -> 0203010100
+    6    a1!@#$%^A2     -> 2100000031
+
+                  15+ chars
+
+    3   !a@A#1$2%b^3&B* -> 020301010201030
+    6   a12!@#$%^&*A345 -> 211000000003111
+
+                  21+ chars
+
+    3   !a@A#1$2%b^3&B*c!4@d% -> 020301010201030201020
+    6   a12!@#$%^&*A345!@#a78 -> 211000000003111000211
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #       Final Code 10 chars     #
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ┃           2222220013          ┃
+    ┃           2111011130          ┃
+    ┃           0203010100          ┃
+    ┃           0032323211          ┃
+    ┃           3011111120          ┃
+    ┃           2100000031          ┃
+    ┃           0122222203          ┃
+    ┃           1013112101          ┃
+    ┃           1333002221          ┃
+    ┃           1111222230          ┃
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #      Final Code 15 chars      #
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ┃        222222220001133        ┃
+    ┃        211110011113000        ┃
+    ┃        020301010201030        ┃
+    ┃        000323232321111        ┃
+    ┃        330011111111220        ┃
+    ┃        211000000003111        ┃
+    ┃        001112222222203        ┃
+    ┃        101311210131210        ┃
+    ┃        133333000222221        ┃
+    ┃        111111112222230        ┃
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #      Final Code 21 chars      #
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ┃     222222222000001113333     ┃
+    ┃     211110011113000111110     ┃
+    ┃     020301010201030201020     ┃
+    ┃     000000032323232111111     ┃
+    ┃     333001111111111122000     ┃
+    ┃     211000000003111000211     ┃
+    ┃     001112222222222220333     ┃
+    ┃     101311210131210111300     ┃
+    ┃     133333000222221000333     ┃
+    ┃     111111111111122222330     ┃
+    #━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    '''
+
+    initialize_charset()
+
+    global lcase, symbol, ucase, number, char_set_complete
+
+
+    '''
+    Legend:
+     0   = symbol
+     1   = number
+     2   = lower case
+     3   = upper case
+    '''
+
+    code_l_10 = [            '2222220013', '2111011130', \
+                             '0203010100', '0032323211', \
+                             '3011111120', '2100000031', \
+                             '0122222203', '1013112101', \
+                             '1333002221', '1111222230'  ]
+
+    code_l_15 = [       '222222220001133', '211110011113000', \
+                        '020301010201030', '000323232321111', \
+                        '330011111111220', '211000000003111', \
+                        '001112222222203', '101311210131210', \
+                        '133333000222221', '111111112222230'  ]
+
+    code_l_21 = [ '222222222000001113333', '211110011113000111110', \
+                  '020301010201030201020', '000000032323232111111', \
+                  '333001111111111122000', '211000000003111000211', \
+                  '001112222222222220333', '101311210131210111300', \
+                  '133333000222221000333', '111111111111122222330'  ]
+
+
+    code_l = []
+
+    password_array = []
+
+    diff = 0
+
+    if (length >= 21):
+        code_l = code_l_21
+        diff = length - 21
+    elif (length >= 15):
+        code_l = code_l_15
+        diff = length - 15
+    else:
+        code_l = code_l_10
+        diff = length - 10
+
+    random.seed()
+
+    for item in code_l:
+
+        password = ''
+
+        for i in range(len(item)):
+
+            code_int = int(item[i])
+        
+            if   (code_int == 2):
+                password = "%s%s" % (password, random.choice(lcase))
+            elif (code_int == 1):
+                password = "%s%s" % (password, random.choice(number))
+            elif (code_int == 0):
+                password = "%s%s" % (password, random.choice(symbol))
+            elif (code_int == 3):
+                password = "%s%s" % (password, random.choice(ucase))
+
+        if (diff == 0):
+            pass
+        elif (diff == 1 ):
+            password += random.choice(char_set_complete)
+        else:
+            mid = int (diff / 2)
+            pw_remaining = ''
+
+            for i in range(diff):
+                pw_remaining += random.choice(char_set_complete)
+
+            password = pw_remaining[:mid] + password + pw_remaining[mid:]
+
+
+        password_array.append(password)
+
+    return password_array
+
+
+def generate_pass_single(length=21):
+
+    """
+    Borrowed from pwmgr generator fn, customized for pw scrambling
+    """
+
+    lcase    = "ambynzcodpeqfrgshtiujvkwlx"
+    symbol   = "!@#$<%?^&+*>:"
+    ucase    = "AMBYNZCODPEQFRGSHTIUJVKWLX"
+    number   = "0123456789"
+
+    char_set_complete = symbol + ucase + number + lcase
+
+    '''
+    Legend:
+     0   = symbol
+     1   = number
+     2   = lower case
+     3   = upper case
+    '''
+
+    random.seed()
+
+    code_l_21 = [ '211110011113000111110', \
+                  '020301010201030201020', \
+                  '333001111111111122000', \
+                  '101311210131210111300', \
+                  '112310123110123233130'  ]
+
+    code_l_21 = random.choice(code_l_21)
+
+    password  = ''
+
+    diff = 0
+
+    if (length >= 21):
+        diff = length - 21
+
+    for i in range(len(code_l_21)):
+
+        code_int = code_l_21[i]
+
+        if   (code_int == '2'):
+            password += random.choice(lcase)
+        elif (code_int == '1'):
+            password += random.choice(number)
+        elif (code_int == '0'):
+            password += random.choice(symbol)
+        elif (code_int == '3'):
+            password += random.choice(ucase)
+
+    if (diff == 1 ):
+        password += random.choice(char_set_complete)
+    else:
+        mid = int (diff / 2)
+        pw_remaining = ''
+
+        for i in range(diff):
+            pw_remaining += random.choice(char_set_complete)
+
+        password = pw_remaining[:mid] + password + pw_remaining[mid:]
+
+    return password
+
+
+def menu_generate_password_standalone(called_by_add_fn=False):
+
+    """
+    Password generator that helps the user pick a password
+    """
+
+    color = color_b('yellow')
+    rst = color_reset()
+
+    if (not called_by_add_fn):
+        cursor_show()
+        clear_screen()
+        print_block(1)
+        print(info_bar_dynamic("Password generator settings | (Ctrl+c) Quit without saving"))
+        print_block(4)
+
+    pwd = ''
+
+    length = prompt_int(color + " Length (default 15): " + rst, \
+                        default=15, min_value=10, max_value=100)
+
+    cursor_hide()
+
+    initialize_resolution()
+
+    global term_len_h, term_len_v
+
+    initialize_theme()
+
+    global theme_number, theme, \
+           field_color_fg, term_bar_color
+
+    header_text_color = ''
+    pw_field_color    = ''
+
+    # Header text
+    if (theme_number == 66):
+        header_text_color = color_b('white') + '\x1B[1;48;5;233m'
+        pw_field_color    = '\x1B[1;48;5;233m\x1B[1;38;5;214m'
+    elif (theme_number == 1):
+        header_text_color = theme
+        pw_field_color = '\x1B[1;48;5;18m\x1B[1;38;5;123m'    
+    elif (theme_number == 2):
+        header_text_color = theme
+        pw_field_color = '\x1B[1;48;5;233m\x1B[1;38;5;214m'
+    elif (theme_number == 3): 
+        header_text_color = color_b('white') + '\x1B[1;48;5;233m'
+        pw_field_color    = '\x1B[1;48;5;233m\x1B[1;38;5;214m'
+    elif (theme_number == 4): 
+        header_text_color = theme
+        pw_field_color    = '\x1B[1;48;5;233m\x1B[1;38;5;214m'
+    elif (theme_number == 5):
+        header_text_color = theme
+        pw_field_color    = '\x1B[1;48;5;233m\x1B[1;38;5;214m'
+    elif (theme_number == 6): 
+        header_text_color = '\x1B[1;38;5;233m' + '\x1B[1;48;5;39m'
+        pw_field_color    = '\x1B[1;48;5;233m\x1B[1;38;5;214m'
+
+
+    term_len_var_h = term_len_h
+    term_len_var_v = term_len_v
+
+    header = ''
+
+    count  = 0
+
+    while (pwd == ''):
+
+        password_list = generate_pass(length)
+
+        for password in password_list:
+
+            # output = detect_screen_res_change()
+            term_len_var_h, term_len_var_v = os.get_terminal_size()
+
+            ################# Aligning Text Vertically ##################
+
+            if (term_len_var_v < 18+3):
+
+                clear_screen()
+                print_block(1)
+                print(text_error('Vertical screen size too small to display data'))
+                sleep(1)
+                clear_screen()
+                sleep(0.5)
+                continue
+
+            term_len_h = term_len_var_h
+            term_len_v = term_len_var_v
+
+            clear_screen()
+
+            if (term_len_v <= 30):
+
+                # This is the number of vertical lines excluding
+                #     data that needs to be printed
+                num_vert_lines = term_len_v - 17
+
+                num_lines_top = int(num_vert_lines/2)
+
+                if ((num_vert_lines % 2) != 0):
+                    num_lines_top = int(num_vert_lines/2) - 1
+
+                print_block(num_lines_top)
+
+            else:
+                print('\n' * 3)
+
+            header =  header_text_color + format_text_center('PWMGR Generator', term_len_h) + rst
+
+            print(color_menu_bars(header_text_color))
+            print(header)
+            print(color_menu_bars(header_text_color))
+            print_block(5)
+
+            pw_text = color_text_with_transparent_bg(format_text_center(password, term_len_h), pw_field_color)
+
+            print(pw_text)
+            print_block(5)
+
+            if (theme_number == 1):
+
+                if (called_by_add_fn):
+                    menu_text = "(G) Press any key to generate | (S) Select | (Q) Quit"
+                else:
+                    menu_text = "(G) Press any key to generate | (Q) Quit"
+
+            else:
+                if (called_by_add_fn):
+                    menu_text = "(G) Generate password | (S) Select | (Q) Quit"
+                else:
+                    menu_text = "(G) Generate password | (Q) Quit"
+
+            print(color_menu_bars(header_text_color))
+
+            if (theme_number == 6):
+                print(color_menu_text(menu_text, header_text_color))
+            else:
+                print(color_menu_text(menu_text))
+
+            print(color_menu_bars(header_text_color))
+
+            while (True):
+
+                try:
+                    char = getch()
+                except(KeyboardInterrupt, OverflowError):
+                    clear_screen()
+                    sys.exit(0)
+
+                if (char == 'g' or char == 'G'):
+                    break
+                elif ((char == 's' or char == 'S') and called_by_add_fn):
+                    pwd = password
+                    break
+                elif (char == 'q' or char == 'Q'):
+                    cursor_show()
+                    clear_screen()
+                    sys.exit(0)
+                else:
+                    pass
+
+            if (pwd != ''):
+                break
+
+    cursor_show()
+
+    if (called_by_add_fn):
+        return pwd
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Database RW                                                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def check_database():
+
+    global file_name, db_file_path, app_name, enc_db_handler, pw_master, password_in_keyring, \
+            config, config_file
+
+    config_path = '/home/%s/.config/pwmgr/' % (os.getlogin())
+
+    if (os.path.exists(config_path) == False):
+        os.mkdir(config_path)
+
+    db_file_path = '%s%s' % (config_path, file_name)
+
+    enc_db_handler = ManageRecord()
+
+    keyfile_path = config.get('keyfile_path')
+
+    if (keyfile_path != ''):
+
+        val = check_files([keyfile_path])
+
+        if (not val):
+            msg = 'Keyfile not found in %s' % keyfile_path
+            print(text_error(msg))
+            sys.exit(1)
+
+    if (os.path.isfile(db_file_path) == False):
+        # No database found
+
+        clear_screen()
+        print_block(1)
+        print(info_bar_dynamic("PWMGR Setup | (Ctrl+c) Quit without saving"))
+        print_block(4)
+        print(text_debug('No database found'))
+        print_block(1)
+
+        if (prompt_yes_no_instant("Do you want to create a new one? (Y/n): ", True)):
+            print_block(1)
+            pw_master = prompt_password(enforce_min_length=True, min_length=8)
+            print_block(1)
+
+            keyfile_name = 'keyfile'
+            keyfile_path = ''
+
+            if (prompt_yes_no_instant("Do you want to use a keyfile? (Y/n): ", True)):
+                keyfile_path = '/home/%s/.config/pwmgr/%s' % (os.getlogin(), keyfile_name)
+                generate_keyfile(keyfile_path, confirm=False, called_by_add_fn=True)
+
+            enc_db_handler.generate_new_key(pw_master, True, True, keyfile_path)
+            enc_db_handler.write_encrypted_database(db_file_path)
+            config.update({'keyfile_path':keyfile_path})
+            write_config(config, config_file)
+
+            if (keyring_set_scrambled(enc_db_handler.get_key()) == False):
+                print(text_error("check_database(): error#01 Unable to store password in keyring"))
+                sys.exit(1)
+
+        else:
+            print_block(1)
+            sys.exit(0)
+    else:
+        # (Previous database exists)
+        # We search for password in keyring, if nothing found we prompt user
+        #       for master password & attempt to decrypt it
+        #
+
+        result = False
+
+        key = keyring_get_scrambled()
+
+        if (key[0]):
+            key = key[1]
+        else:
+            key = False
+
+
+        ## * We use 2 exception handlers, cos IncorrectPasswordException & 
+        ##   IncorrectKeyException() overlap with other exception handlers
+        ##   so we try to minimise code repetition as much as possible
+        ##
+        ## * Updated old code (commented out) which mainly used commandline
+        ##   for interacting with user. The new one interacts with user
+        ##   with GUI prompts for error, password input, etc. It is done
+        ##   because if pwmgr is used with key bindings, the user might not
+        ##   know if things go wrong as cmd prompt might just close without showing 
+        ##   anything.
+
+        try:
+            try:
+                if (key == False):
+                    password_in_keyring = False
+                    pw_master = prompt_password_gui() # GUI password prompt
+
+                    if (pw_master == False):
+                        sys.exit(0)
+
+                    result = enc_db_handler.load_database(db_file_path, pw_master, False, keyfile_path)
+                else:
+
+                    #def load_database(self, filename='data.enc', password='', \
+                    #                        override_integrity_check=False,   \
+                    #                        path_to_keyfile='',               \
+                    #                        load_key_from_keyring=False,      \
+                    #                        enc_key=''):
+
+                    result = enc_db_handler.load_database(filename=db_file_path,         \
+                                                             load_key_from_keyring=True, \
+                                                             enc_key=bytes(key, 'utf-8'))
+
+            except (UnsupportedFileFormatException):
+
+                gui_msg("\n\n  Unfortunately PWMGR no longer supports this file format\n\n" + \
+                        "  Go through the following steps to fix the problem:\n\n" + \
+                        "    1.  Export database using '--export-csv data.csv' on pwmgr 2.6 or earlier\n" + \
+                        "    2.  Remove current installation: 'rm -rf ~/.config/pwmgr/'\n" + \
+                        "    3.  Run '--import data.csv' on latest version of pwmgr >= 3.0\n\n" + \
+                        "  * Releases section of the github page lists downloadable versions\n")
+                sys.exit(0)
+
+            except (IntegrityCheckFailedException):
+
+                r = gui_confirmation('\nHash mismatch detected. Data could have been corrupted!\n\n' + \
+                        'Press OK to repair database\n')
+
+                if (r):
+
+                    if (key):
+                        result = enc_db_handler.load_database(filename=db_file_path,            \
+                                                                 override_integrity_check=True, \
+                                                                 load_key_from_keyring=True,    \
+                                                                 enc_key=bytes(key, 'utf-8'))
+                    else:
+                        result = enc_db_handler.load_database(db_file_path, pw_master, True, keyfile_path)
+
+                    if (result): # Database decryption succeeded
+                        enc_db_handler.write_encrypted_database(db_file_path)
+                        # wiping pw with random values
+                        key       = generate_pass_single(32)
+                        pw_master = generate_pass_single(32)
+                        sys.exit(0)
+                else:
+                    sys.exit(0)
+
+
+            if (result):  # Database decryption succeeded
+
+                ## TODO: option in config to disable key scrambling if its buggy
+                if (password_in_keyring == False):
+                    if (keyring_set_scrambled(enc_db_handler.get_key())):
+                        keyring_set_expiration()
+                    else:
+                        gui_msg("Unable to store password in keyring")
+
+                # wiping pw with random values
+                key       = generate_pass_single(32)
+                pw_master = generate_pass_single(32)
+
+        except IncorrectPasswordException:
+            gui_msg('\nUnable to decrypt data due to incorrect password / keyfile\n')
+            sys.exit(1)
+
+        except DataCorruptedException:
+            gui_msg('\nDatabase is corrupted, trying restoring from backup\n')
+            sys.exit(1)
+
+        except IncorrectKeyException:
+            gui_msg("\nUnable to decrypt data as stored key is incorrect." + \
+                    "\n\nPlease use 'pwmgr --keyring reset' to remove it\n")
+            sys.exit(1)
+
+
+def exit_if_database_is_empty():
+
+    global enc_db_handler
+
+    n = enc_db_handler.get_number_of_records()
+
+    if (n == 0):
+        print_block(1)
+        print(text_debug('No records found in database'))
+        print_block(1)
+        sys.exit(0)
+
+
+def key_show():
+
+    """
+    Display the current key that is being used for encryption
+
+    Note: Needs to be called after database has been loaded in memory using
+          the check_database() function
+        
+    """
+
+    global enc_db_handler
+
+    c_value = color_b('green')
+    c_rst = color_reset()
+
+    key = enc_db_handler.get_key()
+    print()
+    msg = 'Current Key: %s%s%s' % (c_value, key, c_rst)
+    print(text_debug(msg))
+    print()
+
+
+def pw_reset():
+
+    """
+    Change the current password that is used for database encryption 
+
+    Note: Needs to be called after database has been loaded in memory using
+          the check_database() function
+
+    """
+
+    global app_name, enc_db_handler, db_file_path, config
+
+    cursor_hide()
+    clear_screen()
+    print_block(1)
+    print(info_bar_dynamic("Encryption management (pw-reset) | (Ctrl+c) Quit without saving"))
+    print_block(4)
+
+    kf = config.get('keyfile_path')
+
+    new_pwd = ''
+
+    try:
+        new_pwd = prompt_password_master(8)
+    except KeyboardInterrupt:
+        clear_screen()
+        sys.exit()
+
+    if (kf != ''):
+
+        try:
+            enc_db_handler.use_keyfile(new_pwd, kf)
+        except (KeyFileInvalidException):
+            print(text_error("Key file is not valid. Need to have a min size of 1000 bytes"))
+            print(text_debug("Use -gk to generate a new key file"))
+            sys.exit(0)
+    else:
+        enc_db_handler.change_password(new_pwd)
+
+    enc_db_handler.write_encrypted_database(db_file_path)
+
+    keyring_set_scrambled(enc_db_handler.get_key())
+
+    cursor_show()
+    clear_screen()
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Advanced Printing Function                                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def color_menu_column_header(header_list=[], left_indent=7):
+
+    global term_len_h, theme
+
+    if (not global_value_initialized(theme)):
+        theme = ''
+
+    text  = ' '*(term_len_h-left_indent)
+
+    text_list = list(text)
+
+    if (len(header_list) == 0):
+        text = theme + text + color_reset()
+        return text
+
+    ratio_total = 0
+
+    for i in range(len(header_list)):
+        ratio_total = ratio_total + header_list[i][1]
+
+    total_length = len(text_list) - left_indent
+
+    mark = 0
+
+    for i in range(len(header_list)):
+        space_partition = int((total_length * header_list[i][1]) / ratio_total)
+        char_str = list(header_list[i][0])
+        char_length = len(header_list[i][0])
+        right_space = space_partition - char_length
+
+
+        for i in range(len(char_str)):
+            text_list[mark] = char_str[i]
+            mark += 1
+
+        while (right_space > 0):
+            text_list[mark] = ' '
+            mark += 1
+            right_space -= 1
+
+    text = theme + ' ' * left_indent + ''.join(text_list) + color_reset()
+
+    return text
+
+
+def format_data_with_spacing(data_list=[], ratio=[4,4,2,2]):
+
+    global term_len_h
+
+    # Format (data_list)  = '#', 'Site', 'Username', 'Email', 'Group'
+
+    # width of index is fixed at 6 chars, & ratio parameter is used to 
+    # allocate space between the remaining fields site .. group
+
+    number_indent = 7
+
+    text  = ' '*(term_len_h - number_indent)
+
+    text_list = list(text)
+
+    if (len(data_list) == 0):
+        text = ' '*term_len_h + color_reset()
+        return text
+
+    ratio_total = 0
+
+    for i in ratio:
+        ratio_total = ratio_total + i
+
+    str_list = list(str(data_list[0]))
+
+    # Adding additional space on left side, for record index
+    while (len(str_list) < (number_indent-2)):
+        str_list.insert(0, ' ')
+
+    str_list.append(')')
+    str_list.append(' ')
+
+    mark = 0
+
+    for i in range(1,len(data_list)):
+        space_partition = int((len(text_list) * ratio[i-1]) / ratio_total)
+        char_list = list(data_list[i])
+
+        ## Making sure we have 2 space between fields
+        if (len(char_list)+1 >= space_partition):
+            new_list = char_list[:space_partition-5]
+
+            for j in range(len(new_list)):
+                text_list[mark] = new_list[j]
+                space_partition -= 1
+                mark += 1
+
+            while (space_partition > 0):
+                if (space_partition <= 2):
+                    text_list[mark] = ' '
+                    space_partition -= 1
+                    mark += 1
+                else:
+                    text_list[mark] = '.'
+                    space_partition -= 1
+                    mark += 1
+        else:
+            for j in range(len(char_list)):
+                text_list[mark] = char_list[j]
+                space_partition -= 1
+                mark += 1
+
+            while (space_partition > 0):
+                text_list[mark] = ' '
+                space_partition -= 1
+                mark += 1
+
+    text = color_b('yellow') + ''.join(str_list) + color_reset() + ''.join(text_list) 
+
+    return text
+
+
+def format_text_center(text='', term_len_h=''):
+
+    if (len(text) > term_len_h):
+        _text = text.split()
+        _text = _text[:term_len_h]
+        _text[-1] = '.'
+        _text[-2] = '.'
+        _text[-3] = '.'
+        return ''.join(_text)
+
+    else:
+
+        left_indent = int((term_len_h - len(text)) / 2)
+        right_indent = term_len_h - left_indent - len(text)
+
+        return left_indent * ' ' + text + right_indent * ' '
+
+
+def remove_color_at_index(text='', index=0, pattern=''):
+
+    if (text != ''):
+
+        end_index = index
+
+        try:
+
+            i = index
+
+            for j in range(0, len(pattern)):
+
+                if (text[i] == pattern[j]):
+                    i += 1
+                    end_index = i
+                    continue
+                else:
+                    return text
+
+            max_count = 3
+
+            l = 0
+
+            while (l < max_count):
+
+                if (text[end_index+l].isdigit()):
+                    l += 1
+                else:
+                    break
+
+            if (l == 0):
+                return text
+
+            end_index += l
+
+            if (end_index < len(text) and \
+                    text[end_index] == 'm'):
+
+                end_index += 1
+
+                if (index == 0):
+                    return text[end_index:]
+                else:
+                    return text[:index] + text[end_index:]
+
+        except IndexError:
+            pass
+
+    return text
+
+
+def extract_plain_text(text=''):
+    '''
+    Removes colors codes from text
+    '''
+
+    _text = text
+
+    fg_pattern          = '\x1B[0;38;5;'
+    fg_bold_pattern     = '\x1B[1;38;5;'
+    bg_pattern          = '\x1B[0;48;5;'
+    bg_bold_pattern     = '\x1B[1;48;5;'
+
+    color_rst           = '\x1B[0m'
+    cursor_show_pattern = '\033[?25h'
+    cursor_hide_pattern = '\033[?25l'
+
+    if (fg_pattern in _text):
+        index = _text.find(fg_pattern)
+
+        while (index != -1):
+            _text = remove_color_at_index(_text, index, fg_pattern)
+            index = _text.find(fg_pattern)
+
+    if (fg_bold_pattern in _text):
+        index = _text.find(fg_bold_pattern)
+
+        while (index != -1):
+            _text = remove_color_at_index(_text, index, fg_bold_pattern)
+            index = _text.find(fg_bold_pattern)
+
+    if (bg_pattern in _text):
+        index = _text.find(bg_pattern)
+
+        while (index != -1):
+            _text = remove_color_at_index(_text, index, bg_pattern)
+            index = _text.find(bg_pattern)
+
+    if (bg_bold_pattern in _text):
+        index = _text.find(bg_bold_pattern)
+
+        while (index != -1):
+            _text = remove_color_at_index(_text, index, bg_bold_pattern)
+            index = _text.find(bg_bold_pattern)
+
+    if (color_rst in _text):
+        _text = _text.replace(color_rst, '')
+
+    if (cursor_show_pattern in _text):
+        _text = _text.replace(cursor_show_pattern, '')
+
+    if (cursor_hide_pattern in _text):
+        _text = _text.replace(cursor_hide_pattern, '')
+
+    return _text
+
+
+def recolour_text(text='', color=''):
+
+    text = list(extract_plain_text(text))
+
+    for i in range(0, len(text)):
+
+        if (i == ' '):
+            continue
+        else:
+            text[i] = color + text[i]
+            text[-1] = text[-1] + color_reset()
+            break
+
+    return ''.join(text)
+
+
+def color_text_with_transparent_bg(text='', color=''):
+
+    _text = list(text)
+
+    rst = color_reset()
+
+    i = 0
+
+    while (i < len(_text)):
+
+        if (_text[i] != ' '):
+            _text[i] = color + _text[i]
+
+            j = i+1
+
+            while(j < len(text)):
+
+                if (_text[j] == ' ' or j == len(_text)-1):
+                    _text[j] = rst + _text[j]
+                    break
+                else:
+                    j += 1
+
+            i = j+1
+
+        else:
+
+            i += 1
+
+    return ''.join(_text)
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   File IO functions                                                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def read_from_file(fp='', chars_to_skip=[], \
+        startswith_char_l=[], endswith_char_l=[]):
+
+    if (not os.path.isfile(fp)):
+        return (False, [])
+
+    data = []
+
+    try:
+
+        with open(fp, 'r') as fh:
+            data = fh.read().strip().splitlines()
+
+    except (IOError, BaseException) as e:
+        return (False, [])
+
+    data = remove_all_elements_from_list(data, chars_to_skip, \
+            startswith_char_l, endswith_char_l)
+
+    return (True, data)
+
+
+def write_list_to_file(data=[], fp=''):
+
+    if (fp == ''):
+        raise InvalidParameterException('write_list_to_file(): input file cannot be empty')
+    elif (len(data) == 0):
+        return False
+
+    try:
+
+        with open(fp, 'w') as fh:
+
+            for item in data:
+                _item = '%s\n' % item
+                fh.writelines(_item)
+
+    except (IOError, BaseException):
+        return False
+
+    return True
+
+
+def file_exists(fp=''):
+
+    '''
+    Returns the abs path if '~' is present
+    '''
+
+    if (fp == ''):
+        return False
+
+    _fp = ''
+
+    if (fp.startswith('~/')):
+        _fp = '/home/%s/%s' %(os.getlogin(),fp[2:])
+    else:
+        _fp = fp
+
+    if (os.path.isfile(_fp)):
+        return (True, _fp)
+    else:
+        return (False, '')
 
 
 def check_files(files=[]):
@@ -4074,9 +4525,8 @@ def check_if_prog_exists(p_name=[]):
     l = []
 
     for p in p_name:
-        cmd = 'which %s' % p
 
-        stdout, stderr, rc = run_cmd([cmd])
+        stdout, _, rc = run_cmd(['which %s' % p])
 
         if (rc == 1):
             return False, p
@@ -4086,961 +4536,606 @@ def check_if_prog_exists(p_name=[]):
     return True, ''
 
 
-#==========================================================================#
-#                       Password Generation Functions                      #
-#==========================================================================#
+def remove_all_elements_from_list(l=[], element_l=[], \
+        starts_with_l=[], ends_with_l=[]):
 
+    _l = l
 
-def gen_pass(length=10, enableSymbols=True, debug=False):
+    for item in element_l:
+        _l = [x for x in _l if x != item]
 
-    """
-    Generates a secure password
+    for item in starts_with_l:
+        _l = [x for x in _l if x.startswith(item) != True]
 
-    Args: 
-        length (int): The length of specified password
-        enableSymbols (bool): Allow symbols in password (default: True)
-        debug (bool): Enable printing of generated password
+    for item in ends_with_l:
+        _l = [x for x in _l if x.endswith(item) != True]
 
-    Returns: 
-        (str) Generated password
-    """
+    return _l
 
-    if length <= 0:
-        return ""
 
-    seed()
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   User Input & related                                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
-    symbols = "!@#$%^&*(){}[]<>?+-:;"
-    num = "0123456789"
-    lcase = "abcdefghijklmnopqrstuvwxyz"
-    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+def prompt_with_blank(question=""):
 
-    password = ""
+    return input(color_symbol_info() + ' ' + color_b('yellow') + question + color_reset())
 
-    if (enableSymbols):
 
-        for i in range(length+1):
-            choice = rand_list([0,5,2,4,3,1])
-
-            if (choice == 0 or choice == 1):
-                password = "%s%s" % (password, rand_list(symbols))
-            elif (choice == 2 or choice == 3):
-                password = "%s%s" % (password, rand_list(num))
-            elif (choice == 4):
-                password = "%s%s" % (password, rand_list(lcase))
-            elif (choice == 5):
-                password = "%s%s" % (password, rand_list(ucase))
-
-        password = update_missing_type(password)
-
-    else:
-
-        for i in range(length+1):
-            choice = rand_list([3,1,2,0])
-
-            if (choice == 0 or choice == 1):
-                password = "%s%s" % (password, rand_list(num))
-            elif (choice == 2):
-                password = "%s%s" % (password, rand_list(lcase))
-            elif (choice == 3):
-                password = "%s%s" % (password, rand_list(ucase))
-
-    if (debug):
-        print(password)
-
-    return password
-
-
-def gen_pass_secure(length=10, debug=False, grid=True, enableSymbols=True):
-
-    """
-    Generates a grid of 10 passwords of length 10,
-        and selects a random column among them
-
-    Args:
-        length (int): Length of the generated password
-        debug(bool):  Prints all generated passwords
-        grid(bool):   Returns a grid of generated password
-                        of size length x length
-
-        enableSymbols (bool): Allow symbols in password (default: True)
-
-    Returns:
-        (str): Generated password
-
-                or
-
-        int []: An array of generated passwords   
-    """
-
-    password_array = []
-
-    for i in range(length):
-
-        password_array.append(gen_pass(length, enableSymbols, debug))
-
-    password = ""
-
-    if (grid):
-        return password_array
-    else:
-        index = randint(0, length)
-
-        for i in range(length):
-            password = "%s%s" % (password, password_array[i][index])
-
-        return password
-
-
-def update_missing_type(pwd=''):
-
-    """
-    Take a password string & makes sure that all types
-    (alphanumeric + symbols) are present. If not, update
-    it accordingly & return the new string.
-
-    Args:       (str)
-
-    Returns:    (str)
-    """
-
-    symbols = "!@#$%^&*(){}[]<>?+-:;"
-    num = "0123456789"
-    lcase = "abcdefghijklmnopqrstuvwxyz"
-    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-    output = get_max_missing_type(pwd)
-
-    pwd_list = list(pwd)
-
-    if (output[1] != []):
-
-        c = ''
-
-        for i in output[1]:
-
-            if i == 0:
-                c  = "%s" % (rand_list(symbols))
-            elif i == 1:
-                c  = "%s" % (rand_list(num))
-            elif i == 2:
-                c  = "%s" % (rand_list(lcase))
-            elif i == 3:
-                c  = "%s" % (rand_list(ucase))
-            
-            index = get_type_index(pwd, output[0])
-
-            if (index != None):
-                pwd_list[index] = c
-
-        updated_value = update_missing_type(''.join(pwd_list))
-
-        return updated_value
-
-    else:
-        return pwd
-
-
-def get_type_index(s, char_type):
-
-    """
-    Returns first occurence of the character set type
-
-    Parameters:
-    s = (str)
-
-    char_type:
-    0 : if the type is symbol
-    1 : if the type is number
-    2 : if the type is lower case
-    3 : if the type is upper case
-    """
-
-    if (char_type not in [0,1,2,3]):
-        return None
-
-    symbols = "!@#$%^&*(){}[]<>?+-"
-    num = "0123456789"
-    lcase = "abcdefghijklmnopqrstuvwxyz"
-    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-    s_list = list(s)
-
-    if (char_type == 0):
-        for i in range(len(s_list)):
-            if s_list[i] in symbols:
-                return i
-    elif (char_type == 1):
-        for i in range(len(s_list)):
-            if s_list[i] in num:
-                return i
-    elif (char_type == 2):
-        for i in range(len(s_list)):
-            if s_list[i] in lcase:
-                return i
-    elif (char_type == 3):
-        for i in range(len(s_list)):
-            if s_list[i] in ucase:
-                return i
-
-    return None
-
-
-def get_max_missing_type(s):
-
-    """
-    Checks a str & returns a tuple. First value
-    denotes the maximum occurence of that type in the string,
-    while the second value (which is a list) denotes if any types
-    are missing. If all types are present, returns an empty list
-    as second parameter.
-
-    Args:       (str)
-
-    Returns: Tuple with two values (max_type, [missing_type])
-             
-
-    0 : if the type is symbol
-    1 : if the type is number
-    2 : if the type is lower case
-    3 : if the type is upper case
-    """
-    
-    symbols = "!@#$%^&*(){}[]<>?+-"
-    num = "0123456789"
-    lcase = "abcdefghijklmnopqrstuvwxyz"
-    ucase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-    s_count = 0
-    n_count = 0
-    l_count = 0
-    u_count = 0
-
-    tmp_str = list(s)
-
-    for i in range(len(tmp_str)):
-        if (tmp_str[i] in symbols):
-            s_count += 1
-        elif (tmp_str[i] in num):
-            n_count += 1
-        elif (tmp_str[i] in lcase):
-            l_count += 1
-        elif (tmp_str[i] in ucase):
-            u_count += 1
-
-    l = [s_count, n_count, l_count, u_count]
-
-    max_type = l.index(max(l))
-
-    missing_type_list = []
-
-    if (s_count == 0):
-        missing_type_list.append(0)
-
-    if (n_count == 0):
-        missing_type_list.append(1)
-
-    if (l_count == 0):
-        missing_type_list.append(2)
-
-    if (u_count == 0):
-        missing_type_list.append(3)
-
-    return (max_type, missing_type_list)
-
-
-def rand_list(input_list=[]):
-
-    """
-    Returns a random element from the input list
-
-    Args:
-        input_list (list): The provided list
-
-    Returns:
-        object chosen randomly from the list
-    """
-
-    if len(input_list) == 0:
-        return ""
-
-    index = randint(0, len(input_list)-1)
-
-    return input_list[index]
-
-
-#===========================================================================#
-#                             Dmenu / Search Bar                            #
-#===========================================================================#
-
-
-def run_searchbar(input_list=[]):
-
-    """
-    Takes a list of strings as parameter, runs searchbar with
-    those choices & returns the index chosen
-
-    Args:       1) Input list of type string
-                2) The background color for searchbar
-
-    Returns:    1) Index of item that was chosen from the list
-                2) Returns None if nothing was chosen / menu
-                   was cancelled.
-                3) Returns None if empty list is passed as parameter
-
-    """
-
-    #TODO: Searchbar color setup based on theme
-
-    global config
-
-    # Setting Background / Foreground colors
-    # based on the theme that has been set
-
-    _color_background = ''
-    _color_foreground = ''
-
-    if (config.get('theme') == 1):
-        _color_background = '#1C51A3'
-        _color_foreground = '#FFFFFF'
-    elif (config.get('theme') == 2):
-        _color_background = '#1a552b'
-        _color_foreground = '#FFFFFF'
-    elif (config.get('theme') == 3):
-        _color_background = '#000000'
-        _color_foreground = '#FFB737'
-    elif (config.get('theme') == 4):
-        _color_background = '#015072'
-        _color_foreground = '#FFFFFF'
-    elif (config.get('theme') == 5):
-        _color_background = '#844306'
-        _color_foreground = '#FFFFFF'
-    elif (config.get('theme') == 6):
-        _color_background = '#013951'
-        _color_foreground = '#FFB737'
-    elif (config.get('theme') == 66):
-        _color_background = '#010304'
-        _color_foreground = '#0fc6ff'
-    else:
-        # Setting to default theme 1, if no theme found
-        _color_background = '#1C51A3'
-        _color_foreground = '#FFFFFF'
-
-    msg = ''
-
-    if (len(input_list) == 0):
-        return None
-
-    msg = input_list[0]
-
-    if (len(input_list) > 1):
-        for i in range(1, len(input_list)):
-            msg = '%s\n%s' % (msg, input_list[i])
-
-    cmd1 = 'echo -e "%s"' % msg
-
-    fn = config.get('searchbar_font_name')
-    fs = config.get('searchbar_font_size')
-
-    cmd2 = "dmenu -fn '%s-%s' -l 7 -i -p 'pwmgr (search)' -sb '%s' -sf '%s'" % (fn, fs, _color_background, _color_foreground)
-    cmd3 = '%s|%s' % (cmd1, cmd2)
-
-    stdout, stderr, return_code = run_cmd(cmd3)
-
-    if (return_code == 0):
-        index = input_list.index(stdout.strip())
-        return index
-    else:
-        return None
-
-
-def search_bar_show():
-
-    """
-    Search using search bar & display selected record
-
-    Args:    N/A
-
-    Returns: N/A
-    """
-
-    global enc_db_handler
-
-    summary_list = enc_db_handler.get_summary()
-
-    try:
-
-        index = run_searchbar(summary_list)
-
-        if (index == None):
-            sys.exit(1)
-
-    except ValueError:
-        sys.exit(1)
-
-    cursor_hide()
-
-    global term_len_h
-
-    header, data = get_record_at_index(index)
-    show_index_static(header, data, index)
-
-
-def search_bar_copy():
-
-    """
-    Displays search bar & copies chosen password to clipboard
-
-    Args:    N/A
-
-    Returns: N/A
-    """
-
-    global enc_db_handler
-
-    summary_list = enc_db_handler.get_summary()
-
-    index = run_searchbar(summary_list)
-
-    if (index == None):
-        sys.exit(1)
-
-    secure_copy_password(index)
-
-
-#===========================================================================#
-#                       Custom Commandline Interface                        #
-#===========================================================================#
-
-
-def menu_generate_password():
-
-    """
-    Menu that takes care of user password generation & selection process
-
-    Input:   None
-
-    Returns: Password (str)
-    """
-
-    global term_len_h
-
-    term_length_var_h = term_len_h
+def prompt(question=""):
 
     color = color_b('yellow')
     rst = color_reset()
 
-    pwd = ''
+    value = ""
 
-    length = prompt_int(color + " Enter password length (default - 10): " + rst, 10, 6, 30)
+    while (value == ""):
 
-    print_block(1)
+        value = input(color_symbol_info() + ' ' + color + question + rst)
 
-    enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ", True)
+        if (value == ""):
+            print(text_error("Field cannot be blank"))
 
-    cursor_hide()
-
-    while (pwd == ''):
-
-        password_list = gen_pass_secure(length, False, True, enable_symbols)
-
-        for password in password_list:
-
-            output = detect_screen_res_change()
-
-            if (output[0]):
-                term_length_var_h = output[1]
-
-            custom_refresh(1,0)
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-            print_block(5)
-
-            print(color_symbol_info() + \
-                    text_highlight(" Generated password:  "), text_color(password))
-
-            print_block(5)
-
-            menu_text = "(G) Generate password | (S) Select | (Q) Quit"
-
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-            print(color_menu_text(menu_text))
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-
-            while (True):
-                char = getch()
-
-                if (char == 'g' or char == 'G'):
-                    break
-                elif (char == 's' or char == 'S'):
-                    pwd = password
-                    break
-                elif (char == 'q' or char == 'Q'):
-                    cursor_show()
-                    print_block()
-                    sys.exit(1)
-                else:
-                    pass
-
-            if (pwd != ''):
-                break
-
-    cursor_show()
-
-    return pwd
+    return value.lower()
 
 
-def menu_generate_password_standalone():
+def prompt_for_edit_with_blank(question=""):
 
-    """
-    Password generator that helps the user pick a password. 
+    return input(color_symbol_prompt() + ' ' + color_b('yellow') + question + color_reset())
 
-    Input:   None
 
-    Returns: Password (str)
-    """
-
-    global term_len_h
-
-    term_length_var_h = term_len_h
+def prompt_for_edit(question="", enable_color=True):
 
     color = color_b('yellow')
     rst = color_reset()
 
-    print()
+    value = ""
 
-    pwd = ''
+    while (value == ""):
 
-    length = prompt_int(color + " Enter password length (default - 10): " + rst, 10, 6, 30)
-
-    print_block(1)
-
-    enable_symbols = prompt_yes_no("Enable symbols in password? (Y/n): ", True)
-
-    print_block(1)
-
-    cursor_hide()
-
-
-    while (pwd == ''):
-
-        password_list = gen_pass_secure(length, False, True, enable_symbols)
-
-        for password in password_list:
-
-            output = detect_screen_res_change()
-
-            if (output[0]):
-                term_length_var_h = output[1]
-
-            custom_refresh(1,0)
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-            print_block(5)
-
-            print(color_symbol_info() + \
-                    text_highlight(" Generated password:  "), text_color(password))
-
-            print_block(5)
-
-            menu_text = "(G) Generate password | (Q) Quit"
-
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-            print(color_menu_text(menu_text))
-            print(color_menu_bars_dynamic(' ', term_length_var_h))
-
-            while (True):
-
-                char = getch()
-
-                if (char == 'g' or char == 'G'):
-                    break
-                elif (char == 'q' or char == 'Q'):
-                    cursor_show()
-                    print_block()
-                    sys.exit(1)
-                else:
-                    pass
-
-            if (pwd != ''):
-                break
-
-    cursor_show()
-
-
-def detect_screen_res_change():
-
-    global term_len_h
-
-    try:
-
-        term_length_var_h = os.get_terminal_size()[0]
-
-        if (term_length_var_h != term_len_h):
-            term_len_h = term_length_var_h
-            clear_screen() 
-            return True, term_len_h
+        if (enable_color):
+            value = input(color_symbol_prompt() + ' ' + color + question + rst)
         else:
-            return False, term_len_h
+            value = input(color_symbol_prompt() + ' ' + text_highlight(question) + rst)
 
-    except (OSError):
-        return False, term_len_h
+        if (value == ""):
+            print(text_error("Field cannot be blank"))
 
-
-def get_term_settings():
-
-    return termios.tcgetattr(0)
+    return value.lower()
 
 
-def unset_term_mode_raw():
+def prompt_with_sec_mem(question=""):
 
-    tty.setcbreak(0)
+    sec_mem_handler = AllocateSecureMemory()
 
-
-def restore_term_settings(original_attrs=''):
-
-    termios.tcsetattr(0, termios.TCSADRAIN, original_attrs)
-
-
-def generate_keyfile(file_path='', confirm=True, debug=True):
-
-    cmd = ''
-
-    color = color_b('green')
+    color = color_b('yellow')
     rst = color_reset()
-
-    length = 2048
-
-    print_block(1)
 
     while (True):
 
-        l = prompt_blank("Enter length of keyfile (default - 2048 bits): ")
+        sec_mem_handler.add_str_start(input(color_symbol_prompt() + ' ' + color + text_highlight(question) + rst))
 
-        if (l == ""):
+        sec_mem_handler.lstrip()
+
+        if (sec_mem_handler.has_space()):
+            sec_mem_handler.clear_str()
+            print(text_error('Password cannot contain space'))
+
+        elif (not sec_mem_handler.is_empty()):
             break
+        else:
+            sec_mem_handler.clear_str()
+            print(text_error('Password cannot be empty'))
 
+    return sec_mem_handler
+
+
+def prompt_int(question="", default=0, min_value=0, max_value=30):
+
+    while (True):
         try:
-            l = int(l)
+            tmp_value = input(color_symbol_info() + text_highlight(question))
+
+            if (tmp_value == ''):
+                return default
+
+            tmp_value = int(tmp_value)
         except (ValueError):
-            print(text_error('An integer value is required'))
+            print(text_error('Please type an integer'))
             continue
 
-        if (l < 2048):
-            print(text_error('Length cannot be less that 2048 bits'))
-            continue
+        if (tmp_value < min_value):
+            print(text_error('Less than %d characters not allowed' % min_value))
+        elif (tmp_value > max_value):
+            print(text_error('Maximum length limit of %d characters' % min_value))
         else:
-            length = l
-            break
+            return tmp_value
 
 
-    if (file_path == ''):
-        keyfile_name = 'keyfile'
-        c_dir = '/home/%s/.config/pwmgr/%s' % (os.getlogin(), keyfile_name)
+def prompt_password(enforce_min_length=False, min_length=8, blacklisted_chars=[]):
 
-        if (confirm):
-            if (os.path.isfile(c_dir)):
-                print_block(1)
-                confirm_txt = "File '%s' already exists in %s. Overwrite file? (Y/n) " % (keyfile_name, '/'.join(c_dir.split('/')[:-1]))
-                r = prompt_yes_no(confirm_txt)
-            
-                if (not r):
-                    print_block(1)
-                    sys.exit(0)
+    """
+    Used during password generation, prompts for password twice
+        in case user mistypes
+    """
 
-        if (debug):
-            print_block(1)
-            msg = 'Creating keyfile: %s%s%s' % (color, c_dir, rst)
-            print(text_debug(msg))
-
-        cmd = "dd if=/dev/urandom of='%s' bs='%s' count=1 iflag=fullblock" % (c_dir, length)
-
-    else:
-
-        if (os.path.isdir(file_path)):
-            print(text_error('Need to provide filename of keyfile in path'))
-            sys.exit(1)
-        elif (len(file_path.split('/')) == 1 or file_path[:2] == './'): 
-            # Generate keyfile in current working directory as 
-            # user just provided name of key file
-            
-            keyfile_name = ''
-
-            if (len(file_path.split('/')) == 1):
-                keyfile_name = file_path
-            else:
-                keyfile_name = file_path[2:]
-
-            path = '%s/%s' % (os.getcwd(), keyfile_name)
-
-            if (debug):
-                print_block(1)
-                msg = 'Creating keyfile: %s%s%s' % (color, path, rst)
-                print(text_debug(msg))
-
-            cmd = "dd if=/dev/urandom of='%s' bs='%s' count=1 iflag=fullblock" % (path, length)
-        else:
-
-            fn = file_path.split('/')[-1]
-            f_path = '/'.join(file_path.split('/')[:-1])
-            path = '%s/%s' % (f_path, fn)
-            cmd = "dd if=/dev/urandom of='%s' bs='%s' count=1 iflag=fullblock" % (path, length)
-
-            if (confirm):
-                if (os.path.isfile(file_path) and fn != ''):
-                    print_block(1)
-                    confirm_txt = "File '%s' already exists in %s. Overwrite file? (Y/n) " % (fn, file_path)
-                    r = prompt_yes_no(confirm_txt)
-
-                    if (not r):
-                        print_block(1)
-                        sys.exit(0)
-
-            elif (os.path.isdir(f_path) and fn != ''):
-                pass
-
-            else:
-                err_msg = 'Specified path %s is not valid' % file_path
-                print(text_error(err_msg))
-                sys.exit(1)
-
-            if (debug):
-                print_block(1)
-                msg = 'Creating keyfile: %s%s%s' % (color, path, rst)
-                print(text_debug(msg))
-
-    #print(cmd)
-
-    run_cmd(cmd)
-
-    print_block(1)
-    msg = color_symbol_info() + ' Key file creation successful' 
-    print(msg)
-
-
-def use_keyfile(keyfile_path=''):
-
-    #TODO-2: Validate whether keyfile_path is absolute path to key file
-
-    global enc_db_handler, config, config_file, db_file_path 
-
-    master_key = enc_db_handler.get_key()
-
-    pw = ''
-
-    kf = config.get('keyfile_path')
-
-    value1 = ''
     color = color_b('yellow')
     rst = color_reset()
 
-    print_block(1)
+    value1 = ""
+    value2 = ""
 
-    while (True):
-
-        key = ''
-
-        value1 = getpass(color_symbol_info() + color + " Enter current master password: " + rst)
+    while True:
+        value1 = getpass(color_symbol_info() + color + " Enter new password: " + rst)
         value1 = value1.strip()
 
         if (value1 == ""):
             print(text_error("Field cannot be blank"))
             continue
 
-        if (kf != ''):
-            key = enc_db_handler.generate_new_key(value1, False, False, kf)
-        else:
-            key = enc_db_handler.generate_new_key(value1, False, False)
-            
-        if (key != master_key):
-            print(text_error("Master password is incorrect, try again"))
+        if (len(blacklisted_chars) != 0):
+
+            found_blacklist_char = False
+
+            for char in blacklisted_chars:
+
+                if (char in value1):
+                    found_blacklist_char = True
+                    break
+
+            if (found_blacklist_char):
+                print(text_error("The following characters are not permitted (%s)" % convert_list_to_str(blacklisted_chars)))
+                continue
+
+
+        if (enforce_min_length and len(value1) < min_length):
+            print(text_error("Minimum password length: %d " % min_length))
             continue
         else:
-            pw = value1
-            break
+
+            while True:
+
+                print_block(1)
+
+                value2 = getpass(color_symbol_info() + color + " Retype password: " + rst)
+                value2 = value2.strip()
+
+                if (value2 == ""):
+                    print(text_error("Field cannot be blank"))
+                    continue
+                elif (value2 == value1):
+                    return value1
+                else:
+                    print(text_error("Password don't match, try again!"))
+                    break
+
+
+def prompt_password_master(min_length=8):
+
+    """
+    Used to change master password of database
+    """
+
+    global enc_db_handler, config
+
+    master_key = enc_db_handler.get_key()
+    kf = config.get('keyfile_path')
+
+    color = color_b('yellow')
+    rst = color_reset()
+
+    value1 = ""
+    value2 = ""
+
+    while True:
+
+        key = ''
+
+        value1 = getpass(color_symbol_info() + color + " Enter new password: " + rst)
+        value1 = value1.strip()
+
+        if (value1 == ""):
+            print(text_error("Field cannot be blank"))
+            continue
+        elif (len(value1) < min_length):
+            print(text_error("Minimum password length: %d " % min_length))
+            continue
+
+        print()
+
+        value2 = getpass(color_symbol_info() + color + " Retype password:    " + rst)
+        value2 = value2.strip()
+
+        if (value2 != value1):
+            print(text_error("Password don't match, try again"))
+            continue
+
+        else:
+
+            cursor_hide()
+
+            if (kf != ''):
+                key = enc_db_handler.generate_new_key(value1, False, False, kf)
+            else:
+                key = enc_db_handler.generate_new_key(value1, False, False)
+
+            if (key == master_key):
+                print(text_error("New password cannot be the same as old password"))
+                cursor_show()
+                continue
+            else:
+                return value1
+
+
+def prompt_yes_no(question="", default=True):
+
+    """
+    Asks yes/no & returns a boolean value.
+    """
+
+    choice_list = ['da', 'y', 'yes', 'yesh', 'n', 'no', 'nou']
+
+    while (True):
+        choice = prompt_with_blank(question)
+
+        if (choice in choice_list):
+            if (choice in choice_list[:4]):
+                return True
+            else:
+                return False
+        elif (choice == ''):
+            return default
+        else:
+            print(text_error("Invalid answer.  Please answer 'yes/no'"))
+
+
+def prompt_yes_no_instant(question="", default=True, \
+                          quit_if_keyboard_interrupt=True):
+    """
+    Asks yes/no & returns a boolean value.
+    """
+
+    q =  color_symbol_info() + ' ' + color_b('yellow') + question + color_reset() 
+
+    choice = ''
 
     try:
-        enc_db_handler.use_keyfile(pw, keyfile_path)
-    except (KeyFileInvalidException):
-        print(text_error("Key file is not valid. Need to have a min size of 2048 bits"))
-        print(text_debug("Use -gk to generate a new key file"))
-        sys.exit(0)
 
-    config.update({'keyfile_path':keyfile_path})
-    write_config(config, config_file)
-    enc_db_handler.write_encrypted_database(db_file_path)
+        while (True):
 
-    if (keyring_set(enc_db_handler.get_key()) == False):
-        print(text_error("use_keyfile(): Unable to store password in keyring"))
-        sys.exit(1)
+            sys.stdout.write(q)
+            sys.stdout.flush()
 
+            choice = getch()
 
-def list_keyfile(brief=True):
+            print()
 
-    global config
+            if (choice == '\n'):
+                return default
+            elif (choice == 'y'):
+                return True
+            elif (choice == 'n'):
+                return False
+            else:
+                print(text_error("Invalid answer.  Please type 'y/n'"))
 
-    kf = config.get('keyfile_path')
+    except KeyboardInterrupt:
 
-    print_block(1)
+        if (quit_if_keyboard_interrupt):
+            clear_screen()
+            sys.exit()
 
-    if (kf == ''):
-        print(text_debug('No keyfile is currently being used'))
-        print_block(1)
-
-    elif (not check_files([kf])):
-        msg = "Keyfile listed in config '%s' is not found" % kf
-        print(text_error(msg))
-        print_block(1)
-
-    else:
-        c_value = color_b('green')
-        c_rst = color_reset()
-
-        msg = 'Current keyfile: %s%s%s' % (c_value, kf, c_rst)
-
-        print(text_debug(msg))
-        print_block(1)
-
-        kf_data = ''
-
-        with open(kf, 'rb') as fh:
-            kf_data = fh.read()
-        
-        finger_print = base64.urlsafe_b64encode(kf_data).decode('utf-8')
-        
-        if (brief):
-            msg = 'Keyfile fingerprint (base64 encoded, brief): %s%s%s' % \
-                    (c_value, finger_print[-50:], c_rst)
-
-            print(text_debug(msg))
         else:
-            msg = 'Keyfile fingerprint (base64 encoded, full): %s%s%s' % \
-                    (c_value, finger_print, c_rst)
-
-            print(text_debug(msg))
-
-        print_block(1)
+            msg = 'prompt_yes_no_instant(): keyboard interrupt requested'
+            raise KeyboardInterrupt(msg)
 
 
-def remove_keyfile():
+def prompt_yes_no_blank(question=""):
 
-    global enc_db_handler, config, config_file, db_file_path 
+    """
+    Asks yes/no & returns a boolean value.
+    """
 
-    kf = config.get('keyfile_path')
-
-    color = color_b('yellow')
-    rst = color_reset()
-
-
-    if (kf == ''):
-        print(text_error('No keyfile found in config'))
-        sys.exit(1)
-
-    master_key = enc_db_handler.get_key()
-    pw  = ''
-
-    print_block(1)
+    choice_list = ['y', 'yes', 'yesh', 'n', 'no', 'nou']
 
     while (True):
+        choice = prompt_with_blank(question)
 
-        key = ''
-
-        value1 = getpass(color_symbol_info() + color + " Enter current master password: " + rst)
-        value1 = value1.strip()
-
-        if (value1 == ""):
-            print(text_error("Field cannot be blank"))
-            continue
-
-        key = enc_db_handler.generate_new_key(value1, False, False, kf)
-
-        if (key != master_key):
-            print(text_error("Master password is incorrect, try again"))
-            continue
+        if  (choice in choice_list):
+            if (choice in choice_list[:3]):
+                return True
+            else:
+                return False
+        elif (choice == ''):
+            return ''
         else:
-            pw = value1
-            print_block(1)
-            break
-
-    enc_db_handler.remove_keyfile(pw)
-
-    config.update({'keyfile_path':''})
-    write_config(config, config_file)
-
-    enc_db_handler.write_encrypted_database(db_file_path)
-
-    if (keyring_set(enc_db_handler.get_key()) == False):
-        print(text_error("use_keyfile(): Unable to store password in keyring"))
-        sys.exit(1)
+            print(text_error("Invalid answer. Please answer 'yes/no' or leave blank"))
 
 
-def update_progress_bar_classic(index=1,index_range=10, left_indent=10, right_indent=5):
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Printing Functions                                               ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def cursor_hide():
+
+    print("\033[?25l")
+
+
+def cursor_show():
+
+    print("\033[?25h")
+
+
+def bold():
+
+    return "\x1B[1m"
+
+
+def text_highlight(text=''):
+
+    return bold() + text + color_reset()
+
+
+def color_b(c=''):
 
     """
-    Classic progress bar 
-
-    Args:    1) This represents the amount completed out of the total amount
-             2) This represents the total amount
-             3) Amount of padding on the left
-             4) Amount of padding on the right
-
-    Returns: None
+    Bold colors
     """
 
-    #TODO: Fix the transition color when it reaches 50%,
-    #      should be one digit at a time
-
-    color = color_pair('white_blue')
-
-    bar_length = 20
-
-    total_text = list(' ' * bar_length)
-
-    center = int(len(total_text)/2)
-
-    percentage_remaining = int((index/index_range) * 100)
-    percentage_remaining_str = '%3d' % percentage_remaining
-
-    if (index >= index_range-2):
-        progress_text = ' '
-        total_text[center-2] = '1'
-        total_text[center-1] = '0'
-        total_text[center] = '0'
-        total_text[center+1] = '%'
-        remaining_text = ''.join(total_text[:])
-
-        new_text = color_reset() + ' '*left_indent + color + color_b('white') + \
-                '[ ' + remaining_text + ' ]' + color_reset() + ' ' *right_indent
+    if (c == 'white'):
+        return '\x1B[1;38;5;15m'
+    elif (c == 'blue'):
+        return '\x1B[1;38;5;27m' 
+    elif (c == 'cyan'):
+        return '\x1B[1;38;5;51m'
+    elif (c == 'yellow'):
+        return '\x1B[1;38;5;221m'
+    elif (c == 'orange'):
+        return '\x1B[1;38;5;214m'
+    elif (c == 'red'):
+        return '\x1B[1;38;5;196m'
+    elif (c == 'green'):
+        return '\x1B[1;38;5;118m'
+    elif (c == 'black'):
+        return '\x1B[1;38;5;232m'
     else:
-
-        total_text[center-2] = percentage_remaining_str[0]
-        total_text[center-1] = percentage_remaining_str[1]
-        total_text[center] = percentage_remaining_str[2]
-        total_text[center+1] = '%'
-
-        ratio = float(index/index_range * 1.0)
-        progress_amount = int(bar_length * ratio)
-
-        progress_text = ''.join(total_text[:progress_amount])
-        remaining_text = ''.join(total_text[progress_amount:])
-
-        if (progress_amount >= (center)):
-            new_text = color_reset() + ' '*left_indent + color + color_b('white') + \
-                    '[ ' + color_b('white') + progress_text + color_bg('white') + remaining_text + \
-                    color_b('white') + ' ]' + color_reset() + ' '*right_indent
-        else:
-            new_text = color_reset() + ' '*left_indent + color + color_b('white') + \
-                    '[ ' + color_b('blue') + progress_text + color_bg('white') + remaining_text + \
-                    color_b('white') + ' ]' + color_reset() + ' '*right_indent
-
-    sys.stdout.write('\r')
-    sys.stdout.write("%s" % new_text)
-    sys.stdout.flush()
+        return ""
 
 
-#===========================================================================
-#                         Password Migration Options                       #
-#===========================================================================
+def color_bg(c=''):
+
+    """
+    Background colors
+    """
+
+    if (c == 'white'):
+        return '\x1B[1;48;5;15m'
+    elif (c == 'blue'):
+        return '\x1B[1;48;5;27m' 
+    elif (c == 'cyan'):
+        return '\x1B[1;48;5;51m'
+    elif (c == 'yellow'):
+        return '\x1B[1;48;5;221m'
+    elif (c == 'orange'):
+        return '\x1B[1;48;5;214m'
+    elif (c == 'red'):
+        return '\x1B[1;48;5;196m'
+    elif (c == 'green'):
+        return '\x1B[1;48;5;118m'
+    elif (c == 'black'):
+        return '\x1B[1;48;5;232m'
+    else:
+        return ""
+
+
+def color_pair(p=''):
+
+    """
+    Color pair combination
+
+    parameter format: 
+        foreground_background
+            e.g: 'white_black'
+    """
+
+    if (p == 'white_blue'):
+        s = '%s%s' % (color_b('white'), color_bg('blue'))
+        return s
+    elif (p == 'white_yellow'):
+        s = '%s%s' % (color_b('white'), color_bg('yellow'))
+        return s
+    elif (p == 'white_red'):
+        s = '%s%s' % (color_b('white'), color_bg('red'))
+        return s
+    elif (p == 'white_green'):
+        s = '%s%s' % (color_b('white'), color_bg('green'))
+        return s
+    elif (p == 'white_black'):
+        s = '%s%s' % (color_b('white'), color_bg('black'))
+        return s
+    elif (p == 'black_white'):
+        s = '%s%s' % (color_b('black'), color_bg('white'))
+        return s
+    elif (p == 'black_blue'):
+        s = '%s%s' % (color_b('black'), color_bg('blue'))
+        return s
+    elif (p == 'black_yellow'):
+        s = '%s%s' % (color_b('black'), color_bg('yellow'))
+        return s
+    elif (p == 'black_red'):
+        s = '%s%s' % (color_b('black'), color_bg('red'))
+        return s
+    elif (p == 'black_green'):
+        s = '%s%s' % (color_b('black'), color_bg('green'))
+        return s
+
+
+def color_theme_1():
+
+    s = '\x1B[1;38;5;123m\x1B[1;48;5;21m'
+    return s
+
+
+def color_theme_2():
+
+    s = '\x1B[1;38;5;15m\x1B[1;48;5;24m'
+    return s
+
+
+def color_theme_3():
+
+    s = '\x1B[1;38;5;214m\x1B[1;48;5;233m'
+    return s
+
+
+def color_theme_4():
+
+    s = '\x1B[1;38;5;15m\x1B[1;48;5;24m'
+    return s
+
+
+def color_theme_5():
+
+    s = '\x1B[1;38;5;15m\x1B[1;48;5;130m'
+    return s
+
+
+def color_theme_6():
+
+    s = '\x1B[1;38;5;38m\x1B[1;48;5;232m'
+    return s
+
+
+def color_theme_66():
+
+    s = '\x1B[1;38;5;14m\x1B[1;48;5;233m'
+    return s
+
+
+def color_reset():
+    """
+    Reset bg & fg colors
+    """
+
+    return "\x1B[0m"
+
+
+def text_error(text=''):
+
+    text = '\n  ' + color_b('red') + color_symbol_error() + \
+            color_reset() + ' ' + bold() + text +  ' ' + color_reset() + '\n'     
+
+    return text
+
+
+def text_debug(text=''):
+
+    text = color_symbol_debug() + " " + bold() + text + color_reset()
+    return text
+
+
+def color_symbol_prompt():
+
+    text = '  ' + color_b('yellow') + '\u25BA ' + color_reset()
+    return text
+
+
+def color_symbol_info():
+
+    text = '  ' + color_b('green') + '[+]' + color_reset()
+    return text
+
+
+def color_symbol_error():
+
+    return '[-]'
+
+
+def color_symbol_debug():
+
+    text = '  ' + color_b('yellow') + '[*]' + color_reset()
+    return text
+
+
+def print_not_implemented():
+
+    print(text_error("Feature not implemented yet"))
+
+
+def print_block(n=3):
+    for i in range(n):
+        print()
+
+
+def plain_menu_bars(text='\u2501'):
+
+    global term_len_h, term_bar_color
+
+    initialize_theme()
+
+    return term_bar_color + text * term_len_h + color_reset() 
+
+
+def color_menu_bars(color=''):
+
+    global term_len_h
+
+    if (color == ''):
+        global theme
+        color = theme
+
+    return color + ' ' * term_len_h + color_reset()
+
+
+def color_menu_text(text='', color=''):
+
+    global term_len_h
+
+    text_size = len(text)
+    remaining_length = int(term_len_h - text_size)
+
+    left  = 0
+    right = 0
+
+    if (remaining_length%2 == 0): # Even
+        left  = int(remaining_length/2)
+        right = int(remaining_length/2)
+    else:
+        left = int(remaining_length/2)
+        right = remaining_length - left
+
+    if (color==''):
+        global theme
+
+        if (not global_value_initialized(theme)):
+            initialize_theme()
+
+        text =  theme + ' '*left + text + ' '*right + color_reset()
+    else:
+        text =  color + ' '*left + text + ' '*right + color_reset()
+
+    return text
+
+
+def info_bar_dynamic(text=''):
+
+    global theme, term_len_h
+
+    if (not global_value_initialized(theme)):
+        initialize_theme()
+
+    return theme + format_text_center(text, term_len_h) + color_reset()
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Import / Export Functions                                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
 
 def import_from_csv(file_name):
 
@@ -5056,7 +5151,6 @@ def import_from_csv(file_name):
 
     processed_data = csv.reader(data_list, quotechar='"', delimiter=',', \
             quoting=csv.QUOTE_ALL, skipinitialspace=True)
-
 
     csv_list = []
 
@@ -5141,7 +5235,7 @@ def import_from_csv(file_name):
 
         enc_db_handler.write_encrypted_database(db_file_path)
 
-        print_block(1)
+        cursor_show()
         print(text_debug('%s entries have been imported to database' % len(csv_list)))
         print_block(1)
     else:
@@ -5152,7 +5246,7 @@ def import_from_csv(file_name):
         sys.exit(1)
 
 
-def export_to_csv(file_name, brief=False):
+def export_to_csv(file_name):
 
     """
     Exports csv formatted database to the specified file
@@ -5162,47 +5256,11 @@ def export_to_csv(file_name, brief=False):
 
     exit_if_database_is_empty()
 
-    if (brief):
-        enc_db_handler.export_csv_brief(file_name)
-    else:
-        enc_db_handler.export_csv(file_name)
+    enc_db_handler.export_csv(file_name)
 
+    cursor_show()
+    print(text_debug('Exported database to: %s%s%s' % (color_b('green'), file_name, color_reset())))
     print_block(1)
-    print(text_debug('Exported database to file: %s' % file_name))
-    print_block(1)
-
-
-def search_font_name(keyword=''):
-
-    global field_color_fg
-
-    cmd = "fc-list | grep -i '%s' | cut -d':' -f2" % (keyword)
-
-    stdout,stderr,rc = run_cmd(cmd)
-
-    if (stdout == ''):
-        print(text_error('Nothing found'))
-    else:
-
-        color = color_b('yellow')
-        rst   = color_reset()
-
-        font_l = list(set(remove_whitespace_from_list(stdout.split('\n'))))
-
-        font_l.sort()
-
-        count = 1
-
-        print_block(1)
-
-        print(text_debug('The following fonts are installed in system: \n'))
-
-        for f in font_l:
-
-            print("      %s%s)%s %s" % (color, count, rst, f))
-            count += 1
-
-        print_block(1)
 
 
 def read_csv_pwmgr(filename=''):
@@ -5218,28 +5276,28 @@ def read_csv_pwmgr(filename=''):
     """
 
     if (filename == ''):
-        return 
+        return ''
 
-    data = []
+    data_l = []
 
     try:
 
         fh = open(filename, 'r')
 
-        r = csv.reader(fh)
+        data = csv.reader(fh)
 
-        for row in r:
-            data.append(row)
+        for row in data:
+            data_l.append(row)
 
-    except IOError as e:
-        print(e)
+        fh.close()
 
-    fh.close()
+    except IOError:
+        return ''
 
-    if (len(data) != 0 and test_if_single_quoted(data[0])):
-        data = remove_single_quote_from_list(data)
+    if (len(data_l) != 0 and test_if_single_quoted(data_l[0])):
+        data_l = remove_single_quote_from_list(data_l)
 
-    return data
+    return data_l
 
 
 def test_if_single_quoted(record=[]):
@@ -5290,17 +5348,566 @@ def write_csv_pwmgr(data=[], filename=''):
         print(e)
 
 
-def main():
+def prompt_password_gui():
 
-    global theme, config
+    app = wx.App()
+
+    frame = wx.Frame(None, title='pwmgr')
+
+    t_entry = wx.TextEntryDialog(frame, 'Enter Master Password: ', caption='pwmgr',
+            style=wx.TE_PASSWORD|wx.CENTRE|wx.OK|wx.CANCEL, value='')
+
+    if (t_entry.ShowModal() == wx.ID_OK and t_entry.GetValue() != ''):
+        pwd = t_entry.GetValue()
+        t_entry.Destroy()
+        return pwd
+    else:
+        t_entry.Destroy()
+        return False
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   GUI Functions                                                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def gui_msg(value=''):
+
+    if (value == ''):
+        return
+
+    app = wx.App()
+
+    frame = wx.Frame(None, title='pwmgr')
+    msg = wx.MessageDialog(frame, value, caption='pwmgr', style=wx.OK|wx.CENTRE)
+
+    msg.ShowModal()
+    msg.Destroy()
+
+
+def gui_confirmation(value=''):
+
+    app = wx.App()
+
+    frame = wx.Frame(None, title='pwmgr')
+
+    msg = wx.MessageDialog(frame, value, caption='pwmgr', style=wx.OK|wx.CANCEL|wx.CENTRE)
+
+    ID = msg.ShowModal()
+
+    if (ID == wx.ID_OK):
+        msg.Destroy()
+        return True
+    else:
+        msg.Destroy()
+        return False
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Terminal Functions                                               ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def detect_screen_res_change():
+
+    global term_len_h
+
+    try:
+        term_len_var_h = os.get_terminal_size()[0]
+
+        if (term_len_var_h != term_len_h):
+            term_len_h = term_len_var_h
+            return True, term_len_h
+        else:
+            return False, term_len_h
+
+    except (OSError):
+        return False, term_len_h
+
+
+def align_text_vertically(data_len_v=15):
+
+    term_len_var_h, term_len_var_v = os.get_terminal_size()
+
+    # This is the number of vertical lines excluding
+    #     data that needs to be printed
+    print('\n' * int((term_len_v - data_len_v)/2))
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Search Bar Functions                                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def run_searchbar(input_list=[]):
+
+    """
+    Takes a list of strings as parameter, runs searchbar with
+    those choices & returns the index chosen
+
+    Args:       1) Input list of type string
+                2) The background color for searchbar
+
+    Returns:    1) Index of item that was chosen from the list
+                2) Returns None if nothing was chosen / menu
+                   was cancelled.
+                3) Returns None if empty list is passed as parameter
+    """
+
+    global config
+
+    # Setting Background / Foreground colors
+    # based on the theme that has been set
+
+    _color_background = ''
+    _color_foreground = ''
+
+    if (config.get('theme') == 1):
+        _color_background = '#0e3061'
+        _color_foreground = '#dfd5c6'
+    elif (config.get('theme') == 2):
+        _color_background = '#033314'
+        _color_foreground = '#e0c572'
+    elif (config.get('theme') == 3):
+        _color_background = '#000000'
+        _color_foreground = '#ed8d07'
+    elif (config.get('theme') == 4):
+        _color_background = '#0e3e52'
+        _color_foreground = '#dfd5c6'
+    elif (config.get('theme') == 5):
+        _color_background = '#6c3a00'
+        _color_foreground = '#dfd5c6'
+    elif (config.get('theme') == 6):
+        _color_background = '#072a37'
+        _color_foreground = '#e5900f'
+    elif (config.get('theme') == 66):
+        _color_background = '#010304'
+        _color_foreground = '#0fc6ff'
+    else:
+        # Setting to default theme 1, if no theme found
+        _color_background = '#1C51A3'
+        _color_foreground = '#FFFFFF'
+
+    msg = ''
+
+    if (len(input_list) == 0):
+        return None
+
+    msg = input_list[0]
+
+    if (len(input_list) > 1):
+        for i in range(1, len(input_list)):
+            msg = '%s\n%s' % (msg, input_list[i])
+
+    cmd1 = 'echo -e "%s"' % msg
+
+    fn = config.get('searchbar_font_name')
+    fs = config.get('searchbar_font_size')
+
+    cmd2 = "dmenu -fn '%s-%s' -l 7 -i -p 'pwmgr (search)' -sb '%s' -sf '%s'" % (fn, fs, _color_background, _color_foreground)
+    cmd3 = '%s|%s' % (cmd1, cmd2)
+
+    stdout, stderr, return_code = run_cmd(cmd3)
+
+    if (return_code == 0):
+        index = input_list.index(stdout.strip())
+        return index
+    else:
+        return None
+
+
+def search_bar_show():
+
+    """
+    Search using search bar & display selected record
+
+    Args:    N/A
+
+    Returns: N/A
+    """
+
+    global enc_db_handler
+
+    summary_list = enc_db_handler.get_summary()
+
+    try:
+
+        index = run_searchbar(summary_list)
+
+        if (index == None):
+            sys.exit(1)
+
+    except ValueError:
+        sys.exit(1)
+
+    cursor_hide()
+
+    global term_len_h
+
+    header, data = get_record_at_index(index)
+    display_row_static_with_sec_mem(header, data, index)
+
+
+def search_bar_copy():
+
+    """
+    Displays search bar & copies chosen password to clipboard
+
+    Args:    N/A
+
+    Returns: N/A
+    """
+
+    global enc_db_handler
+
+    summary_list = enc_db_handler.get_summary()
+
+    index = run_searchbar(summary_list)
+
+    if (index == None):
+        sys.exit(1)
+
+    secure_copy_password(index)
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Help Text                                                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def print_header():
+
+    global __title, __version__
+
+    txt_color = '\x1B[1;38;5;87m' 
+
+    lines = '    ' + '\u2501' * 71
+
+    print()
+    print(lines)
+
+    header = \
+    """
+                             %s%s %s%s%s
+    """ % (txt_color, text_highlight(__title__), \
+            txt_color, text_highlight(__version__), color_reset())
+
+    print(text_highlight(header))
+
+    print(lines)
+
+
+def print_help():
+
+    print_header()
+
+    txt_color = ''
+
+    field_number_color = color_b('cyan')
+    field_data_color   = color_b('green')
+
+    print(
+    '''
+
+    %sadd%s
+
+         %sAdd a new site to database%s
+
+
+    %saudit%s
+
+         %sPerforms a security audit on all records & generates
+         %sa report on the overall security posture.
+
+         %s* Factors such as password complexity, reuse & age
+         %s  are considered in order to determine the overall
+         %s  risk of using that password
+
+
+    %sedit %s[record number]%s
+
+         %sEdit an entry in the database%s
+
+
+    %ssearch [ group | site | email | username | all ] %s[keyword]%s
+
+         %sSearch by group, site, etc.
+
+         %s* By default, if no other parameters are specified,
+         %s    the '%ssearch %sall%s' function is used%s
+
+
+    %sshow+%s
+
+         %sSearch & display an entry using search bar%s
+
+
+    %sshow %s[record number]%s
+
+         %sShow details about a specific record from database
+
+         %s* If a record number is not specified, the show command
+         %s     displays a brief summary of the entire database
+
+         %s* Multiple comma separated values can also be passed
+         %s     e.g: '%spwmgr -o %s1,2,3'%s
+
+
+    %sshow-latest%s
+
+         %sShow all entries from database sorted chronologically 
+
+
+    %scopy+%s
+
+         %sSearches for a record using search bar &
+            copies the password to clipboard%s
+
+
+    %scopy %s[record number]%s
+
+         %sCopies password for a specific entry to clipboard%s 
+
+
+    %sremove %s[record number]%s
+
+         %sRemove an entry from database
+
+         %s* This command can remove multiple entries
+              e.g: '%spwmgr -d %s55,48'%s
+
+
+    %skeyring-clear%s
+
+         %sAllows the user to remove password from keyring
+
+         %s* This command can be useful for example if you have
+         %s  a different password database & you want to remove
+         %s  the previous password that was set on the keyring%s
+
+
+    %skey-show%s
+
+         %sDisplays the current master key that is being used
+         %sfor encryption / decryption%s
+
+
+    %schange-enc-key%s
+
+         %sAllows the user to change the master password%s
+    ''' % ( color_b('orange'), color_reset(), txt_color, color_reset(), \
+
+            color_b('orange'), color_reset(), \
+                            txt_color,txt_color,txt_color, \
+                            txt_color,txt_color, \
+
+            color_b('orange'), color_b('yellow'), color_reset(), \
+                txt_color,  color_reset(), \
+
+            color_b('orange'), color_b('yellow'), color_reset(), \
+                txt_color,txt_color,txt_color, \
+                color_b('orange'), color_b('yellow'), txt_color, color_reset(), \
+
+            color_b('orange'), color_reset(), txt_color, color_reset(), \
+
+            color_b('orange'), color_b('yellow'), color_reset(), \
+                txt_color,txt_color, \
+                txt_color, txt_color, txt_color, \
+                color_b('orange'), color_b('yellow'), color_reset(), \
+
+            color_b('orange'), color_reset(), txt_color, \
+
+            color_b('orange'), color_reset(), txt_color, color_reset(), \
+
+            color_b('orange'), color_b('yellow'), color_reset(), \
+                txt_color, color_reset(), \
+
+            color_b('orange'), color_b('yellow'), color_reset(), \
+                                txt_color, txt_color, \
+                                color_b('orange'), color_b('yellow'), color_reset(), \
+
+            color_b('orange'), color_reset(), \
+                txt_color,txt_color,txt_color,txt_color,color_reset(), \
+
+            color_b('orange'), color_reset(),txt_color,txt_color,color_reset(), \
+
+            color_b('orange'), color_reset(),txt_color, color_reset()))
+
+
+    print(
+    '''
+    %sgenerator%s
+
+         %sGrants access to the password generator%s
+
+
+    %skeyfile-list%s
+
+         %sList the keyfile that is currently being used by the database
+
+         %s* Please note that data hash is different from file hash%s
+
+
+    %skeyfile-create %s[file path]%s
+
+         %sAllows the user to generate a secure keyfile
+
+         %s* If a path is not provided, the key file is saved in
+         %s  '%s~/.config/pwmgr%s' directory%s
+
+
+    %skeyfile-remove%s
+
+         %sRemoves the existing key file that is being used by the database
+
+         %s* Without a key file, only master password will be used for 
+         %s  encryption / decryption of database%s
+
+
+    %skeyfile-use %s[file path]%s
+
+         %sAdd key file to compliment the master password
+
+         %s* If a path is not provided, pwmgr will search for key file
+         %s  in '%s~/.config/pwmgr%s' directory
+
+         %s* This function can also be used to change an existing keyfile%s
+    '''  % (color_b('orange'), color_reset(), txt_color, color_reset(), \
+
+            color_b('orange'), color_reset(), \
+                txt_color,txt_color, color_reset(), \
+
+            color_b('orange'), color_b('green'), color_reset(), \
+                txt_color, txt_color, \
+                txt_color, color_b('green'), txt_color, color_reset(), \
+
+            color_b('orange'), color_reset(), \
+                txt_color,txt_color,txt_color, color_reset(), \
+
+            color_b('orange'), color_b('green'), color_reset(), \
+                txt_color,txt_color,txt_color, \
+                color_b('green'), color_reset(), \
+                txt_color, color_reset()))
+
+
+    print(
+    '''
+    %sselect-cols-csv %s[order of rows] %s[input file] [output file]%s
+
+         %sLoads csv database, selects & rearranges columns in the specified order
+
+         %s* Can also be used to remove columns that are not needed%s
+    ''' % (color_b('orange'), color_b('yellow'), \
+             color_b('green'), color_reset(),\
+             txt_color,txt_color,color_reset()))
+
+    print(
+    '''
+    %simport-csv %s[input file]%s
+
+         %sImports database from csv file%s
+
+         %s* The following formats are supported:%s
+
+             %s1) %ssite,password%s
+             %s2) %ssite,password,username%s
+             %s3) %ssite,password,username,email%s
+             %s4) %ssite,password,username,email,notes%s
+
+             %s5) %ssite,pass,last_modified,email,notes, ..%s
+
+             %s   (14 fields, including security audit attributes)%s
+             %s      * Used in pwmgr version >= 1.9%s
+    ''' % (color_b('orange'), color_b('green'), color_reset(), \
+           txt_color, color_reset(), \
+           txt_color, color_reset(), \
+           field_number_color,field_data_color,color_reset(), \
+           field_number_color,field_data_color,color_reset(), \
+           field_number_color,field_data_color,color_reset(), \
+           field_number_color,field_data_color,color_reset(), \
+           field_number_color,field_data_color,color_reset(), \
+           txt_color, color_reset(), \
+           txt_color, color_reset()))
+
+
+    print(
+    '''
+    %sexport-csv %s[output file]%s
+
+         %sExports all fields in the database to csv format%s
+
+
+    %ssearch-font %s[keyword]%s
+
+         %sShows you exact font names that you need to specify to customize search bar%s
+
+    ''' % ( color_b('orange'), color_b('green'), color_reset(), \
+            txt_color, color_reset(), \
+            color_b('orange'), color_b('yellow'), color_reset(), \
+            txt_color, color_reset()))
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Exception Handler Classes                                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+class IncorrectKeyException(Exception):
+    def __init__(self, msg="Decryption of database failed due to incorrect key"):
+        super(IncorrectKeyException, self).__init__(msg)
+
+class IncorrectPasswordException(Exception):
+    def __init__(self, msg="Decryption of database failed as password is incorrect"):
+        super(IncorrectPasswordException, self).__init__(msg)
+
+class IntegrityCheckFailedException(Exception):
+    def __init__(self, msg="Database file potentially corrupted"):
+        super(IntegrityCheckFailedException, self).__init__(msg)
+
+class DataCorruptedException(Exception):
+    def __init__(self, msg="Unable to decode unicode chars, " + \
+                            "database file is corrupted"):
+        super(DataCorruptedException, self).__init__(msg)
+
+class InvalidParameterException(Exception):
+    def __init__(self, msg="The input parameter is not valid"):
+        super(InvalidParameterException, self).__init__(msg)
+
+class KeyFileInvalidException(Exception):
+    def __init__(self, msg="Keyfile is invalid, need to use a minimum of 1000 byte key"):
+        super(KeyFileInvalidException, self).__init__(msg)
+
+class NoKeyFoundException(Exception):
+    def __init__(self, msg="Key doesn't exist"):
+        super(NoKeyFoundException, self).__init__(msg)
+
+class UnsupportedFileFormatException(Exception):
+    def __init__(self, msg="Unsupported file format detected"):
+        super(UnsupportedFileFormatException, self).__init__(msg)
+
+class MemoryAllocationFailedException(Exception):
+    def __init__(self, msg='Unable to acquire sufficient memory'):
+        super(MemoryAllocationFailedException, self).__init__(msg)
+
+class SecureClipboardCopyFailedException(Exception):
+    def __init__(self, msg='Unable to copy data using secure method'):
+        super(SecureClipboardCopyFailedException, self).__init__(msg)
+
+
+def main():
 
     try:
         parse_args()
     except KeyboardInterrupt:
         cursor_show()
+        clear_screen()
         sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
-
