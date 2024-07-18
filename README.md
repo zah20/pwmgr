@@ -1,7 +1,8 @@
 ## Password Manager
 
-The commandline password manager that everyone wants :]
+An Open Source Password Manager for Linux
 
+</br>
 
 [Term Paper](https://docs.google.com/document/d/1WU1DhhxxY864XlWm3pJDy-Znjz2RGEpEWyLOp9jbST8/edit?usp=sharing)
 
@@ -12,6 +13,6 @@ The commandline password manager that everyone wants :]
 </br>
 </br>
 
-** New update (v3.0) has been released. It is no longer compatible with
-previous version, so please import your old database via csv before using.
-Also, don't forget to read the help text **
+** New version has been released. It is no longer compatible with
+previous version, so it is recommended to re-import your old database before using.
+Also, some of the commands have undergone changes, so don't forget to read the help text **
