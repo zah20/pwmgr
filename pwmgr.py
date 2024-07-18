@@ -1,14 +1,14 @@
 #!/usr/bin/python3
-from      time import sleep
-from      getch import getch
-from      hashlib import sha256
-from      getpass import getpass
-from      database_pwmgr import ManageRecord,\
-                Record, AllocateSecureMemory 
-import    os, subprocess, sys
-import    wx, random, math
-import    multiprocessing
-import    base64, csv
+from     time import sleep
+from     getch import getch
+from     hashlib import sha256
+from     getpass import getpass
+from     database_pwmgr import ManageRecord,\
+               Record, AllocateSecureMemory 
+import   os, subprocess, sys
+import   wx, random, math
+import   multiprocessing
+import   base64, csv
 
 
 """

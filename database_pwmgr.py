@@ -2642,3 +2642,4 @@ class MemoryAllocationFailedException(Exception):
 class SecureClipboardCopyFailedException(Exception):
     def __init__(self, msg='Unable to copy data using secure method'):
         super(SecureClipboardCopyFailedException, self).__init__(msg)
+
