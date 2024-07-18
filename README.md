@@ -15,5 +15,5 @@ An Open Source Password Manager for Linux
 </br>
 
 ** New version 3.0 has been released. It is no longer compatible with older versions, so please re-import your old database before using.
-Do not forget to read the help text & if you run into any major bugs, feel free to use the stable version (2.6.1) from the download section.
+Do not forget to read the help text & if you run into any major bugs, feel free to download the stable version (2.6.1) from the releases section.
 **
