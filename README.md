@@ -8,11 +8,12 @@ An Open Source Password Manager for Linux
 
 [Guide](https://docs.google.com/document/d/1ZrvNczTJIdKSOdlyhuAYqRsed6BR6HrJmqbaNvtLkSU/edit)
 
-[Video Tutorial](https://www.dropbox.com/s/e81sbk9qaur742l/pwmgr_test.mp4?dl=0)
+[Tutorial](https://www.dropbox.com/s/e81sbk9qaur742l/pwmgr_test.mp4?dl=0)
+
 
 </br>
 </br>
 
-** New version has been released. It is no longer compatible with
-previous version, so it is recommended to re-import your old database before using.
-Also, some of the commands have undergone changes, so don't forget to read the help text **
+** New version 3.0 has been released. It is no longer compatible with older versions, so please re-import your old database before using.
+Do not forget to read the help text & if you run into any major bugs, feel free to use the stable version (2.6.1) from the download section.
+**
