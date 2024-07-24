@@ -3,8 +3,8 @@
     ┃                     Version 3.0.0 (07/17/2024)                     ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-      * This is version is still undergoing testing, so if you run into 
-         any major bugs, feel free to use v2.6.1 from the releases section 
+     * This version is still undergoing testing, so if you run into 
+       any major bugs, feel free to use v2.6.1 from the releases section 
 
 
                           Bug Fixes & Optimization
@@ -27,6 +27,17 @@
                                New Features
                                ━━━━━━━━━━━━
 
+    [x] Database Upgrade:
+
+          [x] File format has been updated and it is no longer compatible with previous versions (< 3.0). 
+
+              * Therefore it is recommended to re import your old database using import function.
+
+          [x] load_database() and load_database_key() functions have been merged,
+               and all of them including write_encrypted_database() has been
+               completely rewritten from scratch reducing code complexity,
+                as well as code size by roughly 200-300 lines of code
+
     [x] User Interface Upgrades:
 
          [x] Upgraded the interface so that yes/no styled questions are reduced to a single keystroke
@@ -39,9 +50,7 @@
 
     [x] Security Upgrades:
 
-         [x] Now offers mitigations to counter buffer overflow exploits in file formats
-
-         [x] Audit metrics upgrade
+         [x] Audit metrics 
 
                   PW complexity has been updated to provide more accurate prediction,
                     one that aligns with real world scenarios
@@ -53,24 +62,14 @@
                       PW age auditing metrics have been updated so that it has more effect on high ratings 
                            if they have not been changed in a long time
 
+         [x] Keyfile generation algorithm is coded from scratch using native Python instead of relying on dd utility.
+
          [x] TPM key scrambling has been implemented using a temporary key.
 
                 * We have tpm key expiration, but we don't want anyone to be able to directly grab key out of tpm and use it
 
-         [x] Keyfile generation upgrade
-
-                    * Coded from scratch using native Python instead of relying on dd utility.
-
-    [x] Database Upgrade:
-
-          [x] File format has been updated and it is no longer compatible with previous versions (< 3.0). 
-
-              * Therefore it is recommended to re import your old database using import-csv function.
-
-          [x] load_database() and load_database_key() functions have been merged,
-               and all of them including write_encrypted_database() has been
-               completely rewritten from scratch reducing code complexity,
-                as well as code size by roughly 200-300 lines of code
+         [x] File format has been upgraded. Now it properly handles errors,
+	 	 therefore reducing attack surface from local exploits
 
     [x] Added an automatic installation script for Ubuntu, Arch Linux & Manjaro distributions
 
@@ -83,7 +82,7 @@
                  integrity of any of the modules have been compromised
 
              * From now on, every release will have it's own set of hashes 
-                   which you can manually verify
+                   which you also can manually verify
 
 
     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓

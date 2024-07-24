@@ -9,35 +9,12 @@ import sys, os, csv
 import base64, math
 
 
-"""
-Database used by Password Manager
+global __app, __author, __updated__, __version__
 
-Copyright © 2024 Zubair Hossain
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-"""
-
-
-global __title__, __author__, __email__, __version__, __last_updated__, __license__
-
-__title__        =  'Password Manager'
-__author__       =  'Zubair Hossain'
-__email__        =  'zhossain@protonmail.com'
-__version__      =  '3.0'
-__last_updated__ =  '07/17/2024'
-__license__      =  'GPLv3'
+__app__           =  'Password Manager'
+__author__        =  'Zubair Hossain'
+__updated__       =  '07/24/2024'
+__version__       =  '3.0.1'
 
 
 """
@@ -45,21 +22,17 @@ __license__      =  'GPLv3'
     ┃             Code Index             ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-       Section name                Line#
+       Record Class                   47
+       ManageRecord                  358
 
-       Record Class                   74
-       ManageRecord                  395
+       Database Encryption Mgmt      377
+       Database RW                   661
+       Database Password Auditing    919
+       Database Miscellaneous       1436
+       Database Export              1937
 
-       Database Encryption Mgmt      402
-       Database RW                   701
-       Database Password Auditing    936
-       Database Miscellaneous       1470
-       Database Export              1981
-
-       Security Functions           2203
-
-       Utility                      2451
-
+       Utility                      2177
+       Security Functions           2374
 """
 
 
@@ -1287,53 +1260,47 @@ class ManageRecord():
         if (rec_len == 0):
             return
 
-        elif (rec_len == 1):
-            self.__record_list[0].set_pw_reuse('0')
+        reuse_pw_indexes_l = []
 
-        else:
+        pw_list = []
 
-            reuse_pw_indexes_l = []
+        for i in range(rec_len):
+            pw_list.append(self.get_pw_of_index(i))
 
-            pw_list = []
+        for i in range(0, rec_len):
 
-            for i in range(rec_len):
-                pw_list.append(self.get_pw_of_index(i))
+            if (i in reuse_pw_indexes_l):
+                continue
 
-            for i in range(0, rec_len):
+            pw1 = pw_list[i]
 
-                if (i in reuse_pw_indexes_l):
+            match = False
+
+            for j in range(0, rec_len):
+
+                if (j==i or j in reuse_pw_indexes_l):
                     continue
 
-                pw1 = pw_list[i]
+                pw2 = pw_list[j]
 
-                match = False
+                if (pw1 == pw2):
+                    match = True
+                    reuse_pw_indexes_l.append(j)
 
-                for j in range(0, rec_len):
+            if (match):
+                reuse_pw_indexes_l.append(i)
 
-                    if (j==i or j in reuse_pw_indexes_l):
-                        continue
+        reuse_pw_indexes_l = list(set(reuse_pw_indexes_l))
 
-                    pw2 = pw_list[j]
+        for i in range(0, rec_len):
 
-                    if (pw1 == pw2):
-                        match = True
-                        reuse_pw_indexes_l.append(j)
-
-                if (match):
-                    reuse_pw_indexes_l.append(i)
-
-            reuse_pw_indexes_l = list(set(reuse_pw_indexes_l))
-
-            for i in range(0, rec_len):
-
-                if (i not in reuse_pw_indexes_l):
-                    self.__record_list[i].set_pw_reuse('0')
-                else:
-                    self.__record_list[i].set_pw_reuse('1')
+            if (i not in reuse_pw_indexes_l):
+                self.__record_list[i].set_pw_reuse('0')
+            else:
+                self.__record_list[i].set_pw_reuse('1')
 
         ## PW Complexity calculations
         for i in range(0, rec_len):
-
             self.__record_list[i].set_pw_complexity(self.audit_pw_complexity(pw_list[i]))
 
 
@@ -1800,7 +1767,7 @@ class ManageRecord():
 
         if (partial_match):
             for i in range(0, _end_index):
-                if ( website.lower() in \
+                if (website.lower() in \
                         self.__record_list[i].get_website().lower()):
                     search_matches.append(i) 
         else:
@@ -2198,6 +2165,203 @@ class ManageRecord():
 
 '''
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   Utility                                                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+'''
+
+def run_cmd(cmd=[], verbose=False):
+
+    """
+    Executes bash commands on local Linux system
+    """
+
+    if (cmd != []):
+        process = subprocess.Popen(cmd, shell=True, \
+                                   stdout=subprocess.PIPE, \
+                                   stderr=subprocess.PIPE)
+
+        stdout,stderr = process.communicate()
+
+        stdout = stdout.decode('utf-8').strip()
+        stderr = stderr.decode('utf-8').strip()
+
+        if (verbose == True):
+            print(stdout)
+
+        return stdout, stderr, process.returncode
+
+
+def parse_comma(value=''):
+
+    if (type(value) == str and value != ''):
+        if (',' in value):
+            data = value.strip().split(',')
+            return data
+        else:
+            return value
+
+    return []
+
+
+def convert_str_to_int(val=None):
+
+    """
+    Takes a string or a comma separated value, converts them
+        and returns a list.
+
+    Args: Either string representation of int or a list of
+          comma separated integer in the form of a string.
+          Example: '1' or '1,2,3'
+
+    Returns: [True/False, [integer list]]
+             - First parameter is False if any of the integer
+               conversion failed. It is only True if all conversions
+               succeed
+             - Second Second parameter is the converted integer
+               values from the comma separated values or just
+               an integer depending on the input
+                
+
+    """
+
+    if (val == None):
+        return [False, []]
+    elif (type(val) == str):
+
+        val = parse_comma(val)
+
+        if (type(val) == str):
+            try:
+                val = val.strip()
+                index = int(val)
+            except (ValueError):
+                return [False, -1]
+            return [True, index]
+        elif (type(val) == list):
+            val_list = []
+            try:
+                for i in val:
+                    val_list.append(int(i))
+
+                return [True, val_list]
+            except (ValueError):
+                return [False, val_list]
+        else:
+            return [False, []]
+    else:
+        return [False, []]
+
+
+def decode_unicode_str_safely(input_str=''):
+
+    if (type(input_str) != bytes):
+        msg = 'decode_unicode_str_safely(): data type needs to be bytes'
+        return InvalidParameterException(msg)
+
+    try:
+        return (True, input_str.decode('utf-8'))
+    except UnicodeDecodeError:
+        return (False, '')
+
+
+def get_libc_path():
+
+    """
+    Returns: success/failure (bool), path (str)
+    """
+    stdout, _, rc = run_cmd('locate libc.so')
+
+    if (rc == 0):
+        path_l = stdout.splitlines()
+
+        for path in path_l:
+
+            if (not ('libc.so' in path and os.path.isfile(path))):
+                continue
+
+            base_name = path.split('/')[-1]
+
+            lib_version = base_name.split('.')[-1]
+            conversion_status = convert_str_to_int(lib_version)
+
+            if (conversion_status[0]):
+
+                stdout, _, rc = run_cmd('file %s | cut -d":" -f2' % path)
+
+                if (rc == 0 and \
+                    stdout.strip().startswith('ELF') and \
+                    'shared object' in stdout.lower()):
+
+                    return (True, path)
+
+    return (False, '')
+
+
+def keyfile_load(fp=''):
+
+    if (not os.path.isfile(fp)):
+        return (False, '')
+
+    data_l = []
+
+    with open(fp, 'r') as fh:
+
+        line = fh.readline()
+
+        while (line != ''):
+            data_l.append(line)
+            line = fh.readline()
+
+    if (len(data_l) == 0):
+        return (False, '')
+    else:
+        return (True, ''.join([data.strip() for data in data_l]))
+
+
+class IncorrectKeyException(Exception):
+    def __init__(self, msg="Decryption of database failed due to incorrect key"):
+        super(IncorrectKeyException, self).__init__(msg)
+
+class IncorrectPasswordException(Exception):
+    def __init__(self, msg="Decryption of database failed as password is incorrect"):
+        super(IncorrectPasswordException, self).__init__(msg)
+
+class IntegrityCheckFailedException(Exception):
+    def __init__(self, msg="Database file potentially corrupted"):
+        super(IntegrityCheckFailedException, self).__init__(msg)
+
+class InvalidParameterException(Exception):
+    def __init__(self, msg="The input parameter is not valid"):
+        super(InvalidParameterException, self).__init__(msg)
+
+class DataCorruptedException(Exception):
+    def __init__(self, msg="Unable to decode unicode chars, " + \
+                            "database file is corrupted"):
+        super(DataCorruptedException, self).__init__(msg)
+
+class KeyFileInvalidException(Exception):
+    def __init__(self, msg="Keyfile is invalid, need to use a minimum of 1000 byte key"):
+        super(KeyFileInvalidException, self).__init__(msg)
+
+class NoKeyFoundException(Exception):
+    def __init__(self, msg="Key doesn't exist"):
+        super(NoKeyFoundException, self).__init__(msg)
+
+class UnsupportedFileFormatException(Exception):
+    def __init__(self, msg="Unsupported file format detected"):
+        super(UnsupportedFileFormatException, self).__init__(msg)
+
+class MemoryAllocationFailedException(Exception):
+    def __init__(self, msg='Unable to acquire sufficient memory'):
+        super(MemoryAllocationFailedException, self).__init__(msg)
+
+class SecureClipboardCopyFailedException(Exception):
+    def __init__(self, msg='Unable to copy data using secure method'):
+        super(SecureClipboardCopyFailedException, self).__init__(msg)
+
+
+'''
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Security Related Functions for PWMGR >= 2.3                        ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 '''
@@ -2440,206 +2604,4 @@ class AllocateSecureMemory():
             msg =  'Unknown error occured, while using secure clipboard copy function'
             raise SecureClipboardCopyFailedException(msg)
 
-
-'''
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   Utility                                                          ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-'''
-
-def run_cmd(cmd=[], verbose=False):
-
-    """
-    Executes bash commands on local Linux system
-    """
-
-    if (cmd != []):
-        process = subprocess.Popen(cmd, shell=True, \
-                                   stdout=subprocess.PIPE, \
-                                   stderr=subprocess.PIPE)
-
-        stdout,stderr = process.communicate()
-
-        stdout = stdout.decode('utf-8').strip()
-        stderr = stderr.decode('utf-8').strip()
-
-        if (verbose == True):
-            print(stdout)
-
-        return stdout, stderr, process.returncode
-
-
-def parse_comma(value=''):
-
-    if (type(value) == str and value != ''):
-        if (',' in value):
-            data = value.strip().split(',')
-            return data
-        else:
-            return value
-
-    return []
-
-
-def convert_str_to_int(val=None):
-
-    """
-    Takes a string or a comma separated value, converts them
-        and returns a list.
-
-    Args: Either string representation of int or a list of
-          comma separated integer in the form of a string.
-          Example: '1' or '1,2,3'
-
-    Returns: [True/False, [integer list]]
-             - First parameter is False if any of the integer
-               conversion failed. It is only True if all conversions
-               succeed
-             - Second Second parameter is the converted integer
-               values from the comma separated values or just
-               an integer depending on the input
-                
-
-    """
-
-    if (val == None):
-        return [False, []]
-    elif (type(val) == str):
-
-        val = parse_comma(val)
-
-        if (type(val) == str):
-            try:
-                val = val.strip()
-                index = int(val)
-            except (ValueError):
-                return [False, -1]
-            return [True, index]
-        elif (type(val) == list):
-            val_list = []
-            try:
-                for i in val:
-                    val_list.append(int(i))
-
-                return [True, val_list]
-            except (ValueError):
-                return [False, val_list]
-        else:
-            return [False, []]
-    else:
-        return [False, []]
-
-
-def decode_unicode_str_safely(input_str=''):
-
-    if (type(input_str) != bytes):
-        msg = 'decode_unicode_str_safely(): data type needs to be bytes'
-        return InvalidParameterException(msg)
-
-    try:
-        return (True, input_str.decode('utf-8'))
-    except UnicodeDecodeError:
-        return (False, '')
-
-
-def get_libc_path():
-
-    """
-    Returns: success/failure (bool), path (str)
-    """
-    stdout, _, rc = run_cmd('locate libc.so')
-
-    if (rc == 0):
-        path_l = stdout.splitlines()
-
-        for path in path_l:
-
-            if (not ('libc.so' in path and os.path.isfile(path))):
-                continue
-
-            base_name = path.split('/')[-1]
-
-            lib_version = base_name.split('.')[-1]
-            conversion_status = convert_str_to_int(lib_version)
-
-            if (conversion_status[0]):
-
-                stdout, _, rc = run_cmd('file %s | cut -d":" -f2' % path)
-
-                if (rc == 0 and \
-                    stdout.strip().startswith('ELF') and \
-                    'shared object' in stdout.lower()):
-
-                    return (True, path)
-
-    return (False, '')
-
-
-def keyfile_load(fp=''):
-
-    if (not os.path.isfile(fp)):
-        return (False, '')
-
-    data_l = []
-
-    with open(fp, 'r') as fh:
-
-        line = fh.readline()
-
-        while (line != ''):
-            data_l.append(line)
-            line = fh.readline()
-
-    if (len(data_l) == 0):
-        return (False, '')
-    else:
-        return (True, ''.join([data.strip() for data in data_l]))
-
-
-'''
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Exception Handler Classes                                          ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-'''
-
-class IncorrectKeyException(Exception):
-    def __init__(self, msg="Decryption of database failed due to incorrect key"):
-        super(IncorrectKeyException, self).__init__(msg)
-
-class IncorrectPasswordException(Exception):
-    def __init__(self, msg="Decryption of database failed as password is incorrect"):
-        super(IncorrectPasswordException, self).__init__(msg)
-
-class IntegrityCheckFailedException(Exception):
-    def __init__(self, msg="Database file potentially corrupted"):
-        super(IntegrityCheckFailedException, self).__init__(msg)
-
-class DataCorruptedException(Exception):
-    def __init__(self, msg="Unable to decode unicode chars, " + \
-                            "database file is corrupted"):
-        super(DataCorruptedException, self).__init__(msg)
-
-class InvalidParameterException(Exception):
-    def __init__(self, msg="The input parameter is not valid"):
-        super(InvalidParameterException, self).__init__(msg)
-
-class KeyFileInvalidException(Exception):
-    def __init__(self, msg="Keyfile is invalid, need to use a minimum of 1000 byte key"):
-        super(KeyFileInvalidException, self).__init__(msg)
-
-class NoKeyFoundException(Exception):
-    def __init__(self, msg="Key doesn't exist"):
-        super(NoKeyFoundException, self).__init__(msg)
-
-class UnsupportedFileFormatException(Exception):
-    def __init__(self, msg="Unsupported file format detected"):
-        super(UnsupportedFileFormatException, self).__init__(msg)
-
-class MemoryAllocationFailedException(Exception):
-    def __init__(self, msg='Unable to acquire sufficient memory'):
-        super(MemoryAllocationFailedException, self).__init__(msg)
-
-class SecureClipboardCopyFailedException(Exception):
-    def __init__(self, msg='Unable to copy data using secure method'):
-        super(SecureClipboardCopyFailedException, self).__init__(msg)
 
