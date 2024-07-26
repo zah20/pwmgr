@@ -10,7 +10,6 @@ An Open Source Password Manager for Linux
 
 [Tutorial](https://www.dropbox.com/s/e81sbk9qaur742l/pwmgr_test.mp4?dl=0)
 
-
 </br>
 </br>
 
@@ -19,5 +18,4 @@ Do not forget to read the help text & if you run into any major bugs, feel free 
 **
 
 </br>
-
-** Due to network disruption in my country, a video update & related content has been postponed to first week of next month **
+[Video Update 07-2024](https://www.dropbox.com/scl/fi/2860k3mkl3c7ivgisalw4/video_07_24_2024.mkv?rlkey=ne1ct8inaj7gxuurx6nlqqzzv&st=lir0mp80&dl=0)
