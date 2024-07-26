@@ -18,4 +18,4 @@ Do not forget to read the help text & if you run into any major bugs, feel free 
 **
 
 </br>
-[Video Update: July, 2024](https://www.dropbox.com/scl/fi/2860k3mkl3c7ivgisalw4/video_07_24_2024.mkv?rlkey=ne1ct8inaj7gxuurx6nlqqzzv&st=lir0mp80&dl=0)
+[Update July 2024](https://www.dropbox.com/scl/fi/2860k3mkl3c7ivgisalw4/video_07_24_2024.mkv?rlkey=ne1ct8inaj7gxuurx6nlqqzzv&st=lir0mp80&dl=0)
