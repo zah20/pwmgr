@@ -3,16 +3,17 @@ from        time import sleep
 from        getch import getch
 from        hashlib import sha256
 from        getpass import getpass
-from        database_pwmgr import ManageRecord, \
+from        database_pwmgr import ManageRecord,\
                  Record, AllocateSecureMemory
 import    csv, math, os
 import    subprocess
 import    random
 import    base64  
 import    sys
-from database_pwmgr import \
-SecureClipboardCopyFailedException, IntegrityCheckFailedException, IncorrectPasswordException, \
-InvalidParameterException, IncorrectKeyException,UnsupportedFileFormatException, NoKeyFoundException, DataCorruptedException
+from  database_pwmgr import \
+     SecureClipboardCopyFailedException,InvalidParameterException,\
+   IncorrectPasswordException,IntegrityCheckFailedException,IncorrectKeyException,\
+ UnsupportedFileFormatException,NoKeyFoundException,DataCorruptedException
 
 
 global __app, __author, __updated__, __version__
@@ -23,16 +24,16 @@ __updated__       =  '07/24/2024'
 __version__       =  '3.0.1'
 
 
-#$$$$━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-global  term_len_h,term_len_v,config_file,db_file_path,             \
-   config,term_bar_color,app_name,file_name,db_handler,              \
- theme_number,theme,field_color_fg,password_in_keyring#              /
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━/
+#$$$$━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$
+global term_len_h,term_len_v,config_file,db_file_path,\
+  config,term_bar_color,app_name,file_name,db_handler, \
+ theme_number,theme,field_color_fg,password_in_keyring#/
+#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━/
 #////////////////////////
 theme='';theme_number=1 
-file_name = 'db.enc'
-app_name  = 'pwmgr'
-db_handler=  True
+file_name= 'db.enc'
+app_name = 'pwmgr'
+db_handler= True
 config = {}
 config_file=''
 db_file_path=''
@@ -40,16 +41,16 @@ field_color_fg=''
 term_bar_color=''
 
 
-global lcase, \
-char_set_complete, \
-symbol, ucase, number
-symbol = "<!$%?+@*^&#>"
-ucase  =  "AMBYNZCODPEQFRGSHTIUJVKWLX"
-lcase  =   "ambynzcodpeqfrgshtiujvkwlx"
-number = "0123456789"
-char_set_complete = \
-symbol + lcase + \
-ucase + \
+global lcase,\
+char_set_complete,\
+symbol,ucase,number
+symbol= "<!$%?+@*^&#>"
+ucase=  "AMBYNZCODPEQFRGSHTIUJVKWLX"
+lcase=   "ambynzcodpeqfrgshtiujvkwlx"
+number= "0123456789"
+char_set_complete=\
+symbol+lcase+\
+ucase+\
 number 
 
 
