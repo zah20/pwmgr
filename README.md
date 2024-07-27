@@ -10,11 +10,16 @@ An Open Source Password Manager for Linux
 
 [Tutorial](https://www.dropbox.com/s/e81sbk9qaur742l/pwmgr_test.mp4?dl=0)
 
-[Update: July, 2024](https://www.dropbox.com/scl/fi/2860k3mkl3c7ivgisalw4/video_07_24_2024.mkv?rlkey=ne1ct8inaj7gxuurx6nlqqzzv&st=lir0mp80&dl=0)
-
 </br>
 </br>
 
 ** New version 3.0 has been released. It is no longer compatible with older versions, so please re-import your old database before using.
 Do not forget to read the help text & if you run into any major bugs, feel free to download the stable version (2.6.1) from the releases section.
 **
+
+</br>
+
+[Update: July, 2024](https://www.dropbox.com/scl/fi/srovv2xxgoudcc7al3zzz/pwmgr_update_07_2024.mp4?rlkey=l2h18w8jna7c6adgk3ww54j9a&st=24vy4zau&dl=0)
+
+</br>
+** More content will be posted on the blog by the first week of August, so stay tuned! **
