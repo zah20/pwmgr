@@ -19,7 +19,9 @@ Do not forget to read the help text & if you run into any major bugs, feel free 
 
 </br>
 
-[Update: July, 2024](https://www.dropbox.com/scl/fi/srovv2xxgoudcc7al3zzz/pwmgr_update_07_2024.mp4?rlkey=l2h18w8jna7c6adgk3ww54j9a&st=24vy4zau&dl=0)
+** Update Video (July, 2024) **
+[Primary Link](https://www.youtube.com/watch?v=j6-eMU_bG4o)
+[Backup Link](https://www.dropbox.com/scl/fi/srovv2xxgoudcc7al3zzz/pwmgr_update_07_2024.mp4?rlkey=l2h18w8jna7c6adgk3ww54j9a&st=24vy4zau&dl=0)
 
 </br>
 ** Slight mistake in the video regarding time frame of the doc protection tool, expect it by end of the year as a Christmas gift. 
