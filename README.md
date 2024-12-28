@@ -1,4 +1,4 @@
-## Password Manager
+![pwmgr_logo](pwmgr_logo.png)
 
 An Open Source Password Manager for Linux
 
