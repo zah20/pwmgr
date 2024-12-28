@@ -24,6 +24,5 @@ Do not forget to read the help text & if you run into any major bugs, feel free 
 [Backup Link](https://www.dropbox.com/scl/fi/srovv2xxgoudcc7al3zzz/pwmgr_update_07_2024.mp4?rlkey=l2h18w8jna7c6adgk3ww54j9a&st=24vy4zau&dl=0)
 
 </br>
-** Slight mistake in the video regarding time frame of the doc protection tool, expect it by end of the year as a Christmas gift. 
-Also, more content will be posted on the blog within the first two weeks of August, so stay tuned!
-**
+** I'm sorry to inform you that the doc protection tool will not be released at this time **
+</br>
