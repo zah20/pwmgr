@@ -53,3 +53,7 @@ Python Dependencies
 </br>
 ** I'm sorry to inform you that the doc protection tool will not be released at this time **
 </br>
+
+</br>
+** I'm once again sorry for any bugs or other issues related to this project. I'll post an update around summer time, Thanks! **
+</br>
