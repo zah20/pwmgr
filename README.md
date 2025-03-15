@@ -46,14 +46,11 @@ Manjaro / Arch Linux:
 Python Dependencies
 
 ```
-  pip3 install --user --break-system-packages getch fernet
+  pip3 install --user --break-system-packages getch cryptography
 ```
 
 </br>
-</br>
-** I'm sorry to inform you that the doc protection tool will not be released at this time **
-</br>
 
 </br>
-** I'm once again sorry for any bugs or other issues related to this project. I'll post an update around summer time, Thanks! **
+** I'm once again sorry for any bugs or other issues related to this project. I'll post an update around summer this year, Thanks! **
 </br>
