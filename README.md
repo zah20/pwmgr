@@ -4,7 +4,7 @@ An Open Source Password Manager for Linux
 
 </br>
 
-[Term Paper](https://drive.google.com/file/d/1t0T4J65QNDYQ2ZE5jga3USxiN-9EwhZK)
+[Term Paper](https://doi.org/10.13140/RG.2.2.16197.72166)
 
 [Guide](https://drive.google.com/file/d/1JoV9Ns5mZiE899xTKmohWwTs1iHDSPmZ/)
 
