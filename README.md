@@ -61,6 +61,3 @@ Python Dependencies
 
 </br>
 
-</br>
-** I'm once again sorry for any bugs or other issues related to this project. I'll post an update around summer this year, Thanks! **
-</br>
