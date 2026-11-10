@@ -29,7 +29,7 @@ Do not forget to read the help text & if you run into any major bugs, feel free 
 
 </br>
 
-** Major Bug warning (Nov, 2026) **
+** Major Bug warning (Nov, 2026) ** </br>
 Currently the pwmgr app has an issue related to TPM key storage, due to change in the API functionality of keyctl utility.
 Therefore our app may not work as expected, expect a bug fix sometime early next year. Sorry for the inconvenience caused.
 
