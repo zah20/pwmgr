@@ -29,7 +29,7 @@ Do not forget to read the help text & if you run into any major bugs, feel free 
 
 </br>
 
-** Critical bug fix related to key storage function, update video will be posted in the coming weeks (11/18/2026) **
+** Critical bug fix related to key storage function (11/18/2026) **
 </br>
 
 </br>
