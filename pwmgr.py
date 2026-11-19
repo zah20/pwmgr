@@ -20,8 +20,8 @@ global __app, __author, __updated__, __current_revision__
 
 __app__              = 'Password Manager'
 __author__           = 'Zubair Hossain'
-__last_updated__     = '07/24/2024'
-__current_revision__ = '3.0.1'
+__last_updated__     = '11/18/2026'
+__current_revision__ = '3.0.2'
 
 
 #$$$$━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$
@@ -3180,6 +3180,8 @@ def keyring_get():
 
     global app_name
 
+    run_cmd('keyctl link @u @s');
+
     key_id, stderr, _ = run_cmd('keyctl request user %s' % (app_name))
 
     if (stderr):
@@ -3201,6 +3203,8 @@ def keyring_set(value):
     """
 
     global app_name
+
+    run_cmd('keyctl link @u @s');
 
     _, stderr, _ = run_cmd('keyctl add user %s %s @u' % (app_name, value))
 

@@ -1,10 +1,17 @@
 
-    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-    ┃                     Version 3.0.1 (07/24/2024)                     ┃
-    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+	┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+	┃                     Version 3.0.2 (11/18/2026)                     ┃
+	┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-     * This version is still undergoing testing, so if you run into 
-       any major bugs, feel free to use v2.6.1 from the releases section 
+	[x] Critical bug due to API change of keyctl utility has been fixed
+
+
+	┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+	┃                     Version 3.0.1 (07/24/2024)                     ┃
+	┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+	* This version is still undergoing testing, so if you run into 
+	any major bugs, feel free to use v2.6.1 from the releases section 
 
 
                           Bug Fixes & Optimization
