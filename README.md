@@ -6,7 +6,7 @@ An Open Source Password Manager for Linux
 
 [Term Paper](https://doi.org/10.13140/RG.2.2.16197.72166)
 
-[Guide](https://drive.google.com/file/d/1JoV9Ns5mZiE899xTKmohWwTs1iHDSPmZ/)
+[Guide](https://1drv.ms/b/c/3E986FF04A850F3A/IQDg_R9mredPTJJvTVUcjLocAeu4wr-GS5lj6xXR2vVF8vE?e=hmRQyb)
 
 [Tutorial](https://www.dropbox.com/s/e81sbk9qaur742l/pwmgr_test.mp4?dl=0)
 
